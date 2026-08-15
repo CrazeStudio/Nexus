@@ -1,29 +1,24 @@
 /*
 ============================================================
 CrazeMind Trainer
-Brand: CrazeStudio
+CrazeStudio
 ============================================================
 
-Commands:
+Supported:
 
+/train 10
 /train 100
 /train 500
 /train 1000
-
 /train full
 /train all
 /train 0
 
-Dataset:
-    togethercomputer/llama-instruct
-
-Storage:
-    IndexedDB
+This stores dataset examples in IndexedDB.
 
 IMPORTANT:
-This is dataset retrieval/learning.
-It does NOT perform neural-network weight
-fine-tuning of Llama.
+This is retrieval/dataset learning.
+It does NOT fine-tune Llama neural weights.
 ============================================================
 */
 
@@ -41,20 +36,25 @@ const DATASET_CONFIG =
 const DATASET_SPLIT =
     "train";
 
-const HF_ROWS_API =
-    "https://datasets-server.huggingface.co/rows";
-
 const PAGE_SIZE =
     100;
 
 const MAX_NORMAL_TRAIN =
     2000;
 
+const API_PATH =
+    "/api/huggingface";
+
+
+/* ============================================================
+   DATABASE
+============================================================ */
+
 const DB_NAME =
     "CrazeMindDB";
 
 const DB_VERSION =
-    4;
+    8;
 
 const STORE_NAME =
     "training";
@@ -65,7 +65,6 @@ const STORE_NAME =
 ============================================================ */
 
 const builtInExamples = [
-
     {
         input: "what is ai",
 
@@ -189,7 +188,6 @@ const builtInExamples = [
 
         source: "CrazeMind"
     }
-
 ];
 
 
@@ -223,8 +221,7 @@ function openDatabase() {
         (resolve, reject) => {
 
             if (
-                typeof indexedDB ===
-                "undefined"
+                typeof indexedDB === "undefined"
             ) {
 
                 reject(
@@ -250,6 +247,7 @@ function openDatabase() {
                     const db =
                         event.target.result;
 
+
                     let store;
 
 
@@ -263,8 +261,7 @@ function openDatabase() {
                             db.createObjectStore(
                                 STORE_NAME,
                                 {
-                                    keyPath:
-                                        "id"
+                                    keyPath: "id"
                                 }
                             );
 
@@ -288,8 +285,7 @@ function openDatabase() {
                             "input",
                             "input",
                             {
-                                unique:
-                                    false
+                                unique: false
                             }
                         );
                     }
@@ -305,8 +301,7 @@ function openDatabase() {
                             "source",
                             "source",
                             {
-                                unique:
-                                    false
+                                unique: false
                             }
                         );
                     }
@@ -338,7 +333,7 @@ function openDatabase() {
 
 
 /* ============================================================
-   SAVE ONE PAGE
+   STORE EXAMPLES
 ============================================================ */
 
 async function storeExamples(
@@ -401,8 +396,7 @@ async function storeExamples(
             try {
 
                 for (
-                    const example
-                    of examples
+                    const example of examples
                 ) {
 
                     if (
@@ -442,35 +436,21 @@ async function storeExamples(
                     }
 
 
-                    /*
-                        Keep records small and safe.
-                    */
+                    store.put({
 
-                    const record = {
+                        id: id,
 
-                        id:
-                            String(id),
+                        input: input,
 
-                        input:
-                            String(input),
-
-                        output:
-                            String(output),
+                        output: output,
 
                         source:
-                            String(
-                                example.source ||
-                                DATASET
-                            ),
+                            example.source ||
+                            DATASET,
 
                         trainedAt:
                             Date.now()
-                    };
-
-
-                    store.put(
-                        record
-                    );
+                    });
 
 
                     saved++;
@@ -482,10 +462,9 @@ async function storeExamples(
                     db.close();
                 } catch {}
 
-
                 reject(
                     new Error(
-                        `Failed to save training page: ${
+                        `Failed to save training data: ${
                             error?.message ||
                             String(error)
                         }`
@@ -515,11 +494,9 @@ async function storeExamples(
                     const error =
                         transaction.error;
 
-
                     try {
                         db.close();
                     } catch {}
-
 
                     reject(
                         new Error(
@@ -539,11 +516,9 @@ async function storeExamples(
                     const error =
                         transaction.error;
 
-
                     try {
                         db.close();
                     } catch {}
-
 
                     reject(
                         new Error(
@@ -561,7 +536,52 @@ async function storeExamples(
 
 
 /* ============================================================
-   FETCH HUGGING FACE ROWS
+   API URL
+============================================================ */
+
+function getApiURL() {
+
+    if (
+        typeof window === "undefined"
+    ) {
+
+        throw new Error(
+            "Training requires a browser."
+        );
+    }
+
+
+    /*
+       A simple localhost HTML preview cannot
+       run a Vercel serverless function.
+    */
+
+    const hostname =
+        window.location.hostname;
+
+
+    if (
+        hostname === "localhost" ||
+        hostname === "127.0.0.1"
+    ) {
+
+        throw new Error(
+            "CrazeMind is running on a normal local preview server. " +
+            "The /api/huggingface Vercel function is unavailable there. " +
+            "Use the deployed Vercel URL or run the project with `vercel dev`."
+        );
+    }
+
+
+    return new URL(
+        API_PATH,
+        window.location.origin
+    );
+}
+
+
+/* ============================================================
+   FETCH DATA
 ============================================================ */
 
 async function fetchRows(
@@ -570,9 +590,7 @@ async function fetchRows(
 ) {
 
     const url =
-        new URL(
-            HF_ROWS_API
-        );
+        getApiURL();
 
 
     url.searchParams.set(
@@ -595,7 +613,12 @@ async function fetchRows(
 
     url.searchParams.set(
         "offset",
-        String(offset)
+        String(
+            Math.max(
+                0,
+                Number(offset) || 0
+            )
+        )
     );
 
 
@@ -604,9 +627,18 @@ async function fetchRows(
         String(
             Math.min(
                 PAGE_SIZE,
-                length
+                Math.max(
+                    1,
+                    Number(length) || 1
+                )
             )
         )
+    );
+
+
+    console.log(
+        "[CrazeMind] API request:",
+        url.href
     );
 
 
@@ -617,22 +649,30 @@ async function fetchRows(
 
         response =
             await fetch(
-                url.toString(),
+                url.href,
                 {
-                    method:
-                        "GET",
+                    method: "GET",
 
                     headers: {
                         Accept:
                             "application/json"
-                    }
+                    },
+
+                    cache:
+                        "no-store"
                 }
             );
 
     } catch (error) {
 
+        console.error(
+            "[CrazeMind] Network error:",
+            error
+        );
+
+
         throw new Error(
-            `Network error while contacting Hugging Face: ${
+            `Could not connect to CrazeMind API: ${
                 error?.message ||
                 String(error)
             }`
@@ -640,36 +680,57 @@ async function fetchRows(
     }
 
 
+    const text =
+        await response.text();
+
+
+    console.log(
+        "[CrazeMind] API status:",
+        response.status
+    );
+
+
     if (
         !response.ok
     ) {
 
-        let detail = "";
+        let message =
+            text ||
+            "No response body";
 
 
         try {
 
-            const error =
-                await response.json();
+            const json =
+                JSON.parse(
+                    text
+                );
 
 
-            detail =
-                error?.error ||
-                error?.message ||
-                "";
+            message =
+                json.details ||
+                json.error ||
+                message;
 
-        } catch {
-            // Response was not JSON.
-        }
+        } catch {}
 
 
         throw new Error(
-            `Hugging Face request failed: ${response.status}` +
-            (
-                detail
-                    ? ` — ${detail}`
-                    : ""
-            )
+            `Training API returned HTTP ${
+                response.status
+            }: ${
+                message
+            }`
+        );
+    }
+
+
+    if (
+        !text.trim()
+    ) {
+
+        throw new Error(
+            "Training API returned an empty response."
         );
     }
 
@@ -680,15 +741,27 @@ async function fetchRows(
     try {
 
         data =
-            await response.json();
+            JSON.parse(
+                text
+            );
 
-    } catch (error) {
+    } catch {
 
         throw new Error(
-            `Hugging Face returned invalid JSON: ${
-                error?.message ||
-                String(error)
-            }`
+            "Training API returned invalid JSON."
+        );
+    }
+
+
+    if (
+        !data ||
+        !Array.isArray(
+            data.rows
+        )
+    ) {
+
+        throw new Error(
+            "Training API did not return a rows array."
         );
     }
 
@@ -719,12 +792,6 @@ function parseLlamaText(
     const results =
         [];
 
-
-    /*
-        Standard Llama format:
-
-        [INST] question [/INST] answer
-    */
 
     const regex =
         /\[INST\]\s*([\s\S]*?)\s*\[\/INST\]\s*([\s\S]*?)(?=\s*\[INST\]|$)/gi;
@@ -761,75 +828,13 @@ function parseLlamaText(
 
             results.push({
 
-                input,
+                input: input,
 
-                output,
+                output: output,
 
                 source:
                     DATASET
             });
-        }
-    }
-
-
-    /*
-        Fallback.
-    */
-
-    if (
-        results.length === 0
-    ) {
-
-        const start =
-            clean.indexOf(
-                "[INST]"
-            );
-
-
-        const end =
-            clean.indexOf(
-                "[/INST]"
-            );
-
-
-        if (
-            start !== -1 &&
-            end !== -1 &&
-            end > start
-        ) {
-
-            const input =
-                clean
-                    .slice(
-                        start + 6,
-                        end
-                    )
-                    .trim();
-
-
-            const output =
-                clean
-                    .slice(
-                        end + 7
-                    )
-                    .trim();
-
-
-            if (
-                input &&
-                output
-            ) {
-
-                results.push({
-
-                    input,
-
-                    output,
-
-                    source:
-                        DATASET
-                });
-            }
         }
     }
 
@@ -857,8 +862,7 @@ function parseRow(
 
 
     if (
-        typeof row.text ===
-        "string"
+        typeof row.text === "string"
     ) {
 
         return parseLlamaText(
@@ -888,14 +892,10 @@ function parseRow(
         return [{
 
             input:
-                String(
-                    input
-                ),
+                String(input),
 
             output:
-                String(
-                    output
-                ),
+                String(output),
 
             source:
                 DATASET
@@ -908,7 +908,7 @@ function parseRow(
 
 
 /* ============================================================
-   DOWNLOAD DATASET
+   DOWNLOAD LLAMA DATA
 ============================================================ */
 
 export async function downloadLlamaData(
@@ -928,8 +928,7 @@ export async function downloadLlamaData(
         )
     ) {
 
-        requested =
-            20;
+        requested = 20;
     }
 
 
@@ -939,11 +938,7 @@ export async function downloadLlamaData(
         );
 
 
-    /*
-        0 = full dataset.
-    */
-
-    const wholeDataset =
+    const full =
         requested === 0;
 
 
@@ -958,7 +953,7 @@ export async function downloadLlamaData(
 
 
     if (
-        !wholeDataset
+        !full
     ) {
 
         requested =
@@ -979,10 +974,6 @@ export async function downloadLlamaData(
             : null;
 
 
-    /*
-        Allow resuming from an offset.
-    */
-
     let offset =
         Math.max(
             0,
@@ -993,16 +984,17 @@ export async function downloadLlamaData(
 
 
     let rowsProcessed = 0;
+
     let examplesSaved = 0;
 
 
     while (
-        wholeDataset ||
+        full ||
         rowsProcessed < requested
     ) {
 
         const remaining =
-            wholeDataset
+            full
                 ? PAGE_SIZE
                 : requested -
                   rowsProcessed;
@@ -1026,12 +1018,12 @@ export async function downloadLlamaData(
                     rowsProcessed,
 
                 total:
-                    wholeDataset
+                    full
                         ? null
                         : requested,
 
                 percent:
-                    wholeDataset
+                    full
                         ? null
                         : Math.round(
                             (
@@ -1044,16 +1036,12 @@ export async function downloadLlamaData(
                     examplesSaved,
 
                 message:
-                    wholeDataset
-                        ? `Downloading row ${offset}...`
+                    full
+                        ? `Downloading rows ${offset}-${offset + pageLength - 1}...`
                         : `Downloading ${rowsProcessed}/${requested}...`
             });
         }
 
-
-        /*
-            Download one page.
-        */
 
         const data =
             await fetchRows(
@@ -1063,16 +1051,8 @@ export async function downloadLlamaData(
 
 
         const rows =
-            Array.isArray(
-                data?.rows
-            )
-                ? data.rows
-                : [];
+            data.rows;
 
-
-        /*
-            Dataset finished.
-        */
 
         if (
             rows.length === 0
@@ -1082,29 +1062,24 @@ export async function downloadLlamaData(
         }
 
 
-        /*
-            Parse.
-        */
-
         const examples =
             [];
 
 
         for (
-            const row
-            of rows
+            const item of rows
         ) {
 
             try {
 
                 const parsed =
                     parseRow(
-                        row
+                        item
                     );
 
 
                 if (
-                    parsed.length
+                    parsed.length > 0
                 ) {
 
                     examples.push(
@@ -1115,44 +1090,25 @@ export async function downloadLlamaData(
             } catch (error) {
 
                 console.warn(
-                    "Could not parse row:",
+                    "[CrazeMind] Parse error:",
                     error
                 );
             }
         }
 
 
-        /*
-            SAVE ONLY THIS PAGE.
-
-            This prevents one huge IndexedDB
-            transaction.
-        */
-
         if (
-            examples.length
+            examples.length > 0
         ) {
 
-            try {
-
-                const saved =
-                    await storeExamples(
-                        examples
-                    );
-
-
-                examplesSaved +=
-                    saved;
-
-            } catch (error) {
-
-                throw new Error(
-                    `Training stopped at dataset row ${offset}: ${
-                        error?.message ||
-                        String(error)
-                    }`
+            const saved =
+                await storeExamples(
+                    examples
                 );
-            }
+
+
+            examplesSaved +=
+                saved;
         }
 
 
@@ -1175,12 +1131,12 @@ export async function downloadLlamaData(
                     rowsProcessed,
 
                 total:
-                    wholeDataset
+                    full
                         ? null
                         : requested,
 
                 percent:
-                    wholeDataset
+                    full
                         ? null
                         : Math.round(
                             (
@@ -1193,19 +1149,15 @@ export async function downloadLlamaData(
                     examplesSaved,
 
                 message:
-                    wholeDataset
+                    full
                         ? `Learned ${examplesSaved} examples — ${rowsProcessed} rows processed`
                         : `Learned ${examplesSaved} examples`
             });
         }
 
 
-        /*
-            Normal training finished.
-        */
-
         if (
-            !wholeDataset &&
+            !full &&
             rowsProcessed >= requested
         ) {
 
@@ -1213,22 +1165,13 @@ export async function downloadLlamaData(
         }
 
 
-        /*
-            Short page means end.
-        */
-
         if (
-            rows.length <
-            pageLength
+            rows.length < pageLength
         ) {
 
             break;
         }
 
-
-        /*
-            Give the browser time to breathe.
-        */
 
         await new Promise(
             resolve =>
@@ -1245,7 +1188,7 @@ export async function downloadLlamaData(
     ) {
 
         throw new Error(
-            "Hugging Face returned data, but no usable training examples were found."
+            "No usable training examples were found."
         );
     }
 
@@ -1261,7 +1204,7 @@ export async function downloadLlamaData(
                 rowsProcessed,
 
             total:
-                wholeDataset
+                full
                     ? rowsProcessed
                     : requested,
 
@@ -1272,9 +1215,9 @@ export async function downloadLlamaData(
                 examplesSaved,
 
             message:
-                wholeDataset
-                    ? `Full training complete: ${examplesSaved} examples`
-                    : `Training complete: ${examplesSaved} examples`
+                full
+                    ? `Full training complete — ${examplesSaved} examples`
+                    : `Training complete — ${examplesSaved} examples`
         });
     }
 
@@ -1287,11 +1230,6 @@ export async function downloadLlamaData(
         examples:
             examplesSaved,
 
-        targetRows:
-            wholeDataset
-                ? rowsProcessed
-                : requested,
-
         dataset:
             DATASET,
 
@@ -1301,13 +1239,14 @@ export async function downloadLlamaData(
         split:
             DATASET_SPLIT,
 
-        wholeDataset
+        wholeDataset:
+            full
     };
 }
 
 
 /* ============================================================
-   MAIN TRAINER
+   MAIN TRAIN FUNCTION
 ============================================================ */
 
 export async function trainCrazeMind(
@@ -1347,19 +1286,11 @@ export async function trainCrazeMind(
     }
 
 
-    /*
-        Save built-in knowledge.
-    */
-
     const builtIn =
         await storeExamples(
             builtInExamples
         );
 
-
-    /*
-        Download dataset.
-    */
 
     const result =
         await downloadLlamaData(
@@ -1385,7 +1316,8 @@ export async function trainCrazeMind(
         trainedExamples:
             result.examples,
 
-        builtIn,
+        builtIn:
+            builtIn,
 
         dataset:
             result.dataset,
@@ -1403,7 +1335,7 @@ export async function trainCrazeMind(
 
 
 /* ============================================================
-   LEARN ONE
+   LEARN
 ============================================================ */
 
 export async function learn(
@@ -1519,7 +1451,7 @@ export async function recall(
 
 
 /* ============================================================
-   STATISTICS
+   STATS
 ============================================================ */
 
 export async function getTrainingStats() {
@@ -1596,7 +1528,7 @@ export async function getTrainingStats() {
 
 
 /* ============================================================
-   EXPORT DATA
+   EXPORT DATASET
 ============================================================ */
 
 export async function exportDataset() {
@@ -1605,7 +1537,7 @@ export async function exportDataset() {
         await openDatabase();
 
 
-    const data =
+    const result =
         await new Promise(
             (resolve, reject) => {
 
@@ -1640,7 +1572,6 @@ export async function exportDataset() {
 
                         reject(
                             new Error(
-                                request.error?.message ||
                                 "Export failed."
                             )
                         );
@@ -1652,12 +1583,12 @@ export async function exportDataset() {
     db.close();
 
 
-    return data;
+    return result;
 }
 
 
 /* ============================================================
-   DOWNLOAD TRAINING FILE
+   DOWNLOAD TRAINING DATA
 ============================================================ */
 
 export async function downloadWeights() {
@@ -1669,7 +1600,7 @@ export async function downloadWeights() {
     const data = {
 
         format:
-            "CrazeMind-Training-v6",
+            "CrazeMind-Training",
 
         brand:
             "CrazeStudio",
@@ -1683,7 +1614,8 @@ export async function downloadWeights() {
         createdAt:
             new Date().toISOString(),
 
-        examples
+        examples:
+            examples
     };
 
 
@@ -1761,7 +1693,7 @@ export async function importWeights(
     if (!file) {
 
         throw new Error(
-            "No file selected."
+            "No training file selected."
         );
     }
 
@@ -1770,16 +1702,27 @@ export async function importWeights(
         await file.text();
 
 
-    const data =
-        JSON.parse(
-            text
+    let data;
+
+
+    try {
+
+        data =
+            JSON.parse(
+                text
+            );
+
+    } catch {
+
+        throw new Error(
+            "Training file is not valid JSON."
         );
+    }
 
 
     if (
-        !data ||
         !Array.isArray(
-            data.examples
+            data?.examples
         )
     ) {
 
@@ -1796,7 +1739,7 @@ export async function importWeights(
 
 
 /* ============================================================
-   CUSTOM TRAINING
+   CUSTOM DATASET
 ============================================================ */
 
 export async function trainDataset(
@@ -1805,9 +1748,7 @@ export async function trainDataset(
 ) {
 
     if (
-        !Array.isArray(
-            dataset
-        )
+        !Array.isArray(dataset)
     ) {
 
         throw new TypeError(
@@ -1816,28 +1757,24 @@ export async function trainDataset(
     }
 
 
-    let saved = 0;
-
-
-    /*
-        Save in small batches instead of
-        one giant transaction.
-    */
-
-    const BATCH =
+    const batchSize =
         100;
+
+
+    let saved =
+        0;
 
 
     for (
         let i = 0;
         i < dataset.length;
-        i += BATCH
+        i += batchSize
     ) {
 
         const batch =
             dataset.slice(
                 i,
-                i + BATCH
+                i + batchSize
             );
 
 
@@ -1870,7 +1807,7 @@ export async function trainDataset(
 
 
         if (
-            cleaned.length
+            cleaned.length > 0
         ) {
 
             saved +=
@@ -1892,7 +1829,7 @@ export async function trainDataset(
 
                 current:
                     Math.min(
-                        i + BATCH,
+                        i + batchSize,
                         dataset.length
                     ),
 
@@ -1900,15 +1837,17 @@ export async function trainDataset(
                     dataset.length,
 
                 percent:
-                    Math.round(
-                        (
-                            Math.min(
-                                i + BATCH,
+                    dataset.length === 0
+                        ? 100
+                        : Math.round(
+                            (
+                                Math.min(
+                                    i + batchSize,
+                                    dataset.length
+                                ) /
                                 dataset.length
-                            ) /
-                            dataset.length
-                        ) * 100
-                    ),
+                            ) * 100
+                        ),
 
                 examples:
                     saved,
@@ -1999,7 +1938,7 @@ export async function clearTraining() {
 
 
 /* ============================================================
-   RESET
+   RESET TRAINING
 ============================================================ */
 
 export async function resetTraining(
@@ -2026,30 +1965,41 @@ export const trainer = {
     train:
         trainCrazeMind,
 
-    trainCrazeMind,
+    trainCrazeMind:
+        trainCrazeMind,
 
     trainFromLlama:
         trainCrazeMind,
 
-    downloadLlamaData,
+    downloadLlamaData:
+        downloadLlamaData,
 
-    trainDataset,
+    trainDataset:
+        trainDataset,
 
-    learn,
+    learn:
+        learn,
 
-    recall,
+    recall:
+        recall,
 
-    getTrainingStats,
+    getTrainingStats:
+        getTrainingStats,
 
-    exportDataset,
+    exportDataset:
+        exportDataset,
 
-    downloadWeights,
+    downloadWeights:
+        downloadWeights,
 
-    importWeights,
+    importWeights:
+        importWeights,
 
-    clearTraining,
+    clearTraining:
+        clearTraining,
 
-    resetTraining
+    resetTraining:
+        resetTraining
 };
 
 
