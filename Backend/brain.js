@@ -18,19 +18,26 @@ Local math
   ↓
 Local knowledge
   ↓
+Netlify Function
+  ↓
 Gemini API
   ↓
 Save Gemini answer to local memory
 
 IMPORTANT:
-Gemini is ONLY a fallback.
 
-GitHub Pages:
-The Gemini API is called directly from the browser.
+The Gemini API key is NEVER stored in this file.
 
-WARNING:
-A Gemini API key in frontend JavaScript is visible to users.
-Use this only for testing/personal use.
+The browser calls:
+
+/.netlify/functions/gemini
+
+The Netlify Function reads:
+
+GEMINI_API_KEY
+
+from the Netlify environment.
+
 ============================================================
 */
 
@@ -58,16 +65,30 @@ import {
    CONFIGURATION
 ============================================================ */
 
-const GEMINI_API_KEY =
-    typeof window !== "undefined"
-        ? String(
-            window
-                ?.CRAZEMIND_CONFIG
-                ?.GEMINI_API_KEY ||
-            ""
-        ).trim()
-        : "";
+/*
+    Netlify Function endpoint.
 
+    If the site is:
+
+    https://crazestudio.netlify.app
+
+    the browser calls:
+
+    https://crazestudio.netlify.app/.netlify/functions/gemini
+
+    Using a relative URL also works with custom domains.
+*/
+
+const GEMINI_ENDPOINT =
+    "/.netlify/functions/gemini";
+
+
+/*
+    Stable Gemini model.
+
+    The actual Gemini API call is performed
+    by the Netlify Function.
+*/
 
 const GEMINI_MODEL =
     "gemini-2.5-flash";
@@ -95,11 +116,18 @@ export function getLastAnswerSource() {
    NORMALIZE
 ============================================================ */
 
-function normalize(text) {
+function normalize(
+    text
+) {
 
-    return String(text || "")
+    return String(
+        text || ""
+    )
         .toLowerCase()
-        .replace(/\s+/g, " ")
+        .replace(
+            /\s+/g,
+            " "
+        )
         .trim();
 }
 
@@ -110,20 +138,49 @@ function normalize(text) {
 
 function makeAnswer(
     answer,
-    source = lastSource
+    source = lastSource,
+    sources = null
 ) {
+
+    const text =
+        String(
+            answer ?? ""
+        );
+
+
+    let sourceList;
+
+
+    if (
+        Array.isArray(
+            sources
+        )
+    ) {
+
+        sourceList =
+            sources;
+
+    } else if (
+        source
+    ) {
+
+        sourceList =
+            [source];
+
+    } else {
+
+        sourceList =
+            [];
+    }
+
 
     return {
 
         answer:
-            String(
-                answer ?? ""
-            ),
+            text,
 
         sources:
-            source
-                ? [source]
-                : []
+            sourceList
 
     };
 }
@@ -133,7 +190,9 @@ function makeAnswer(
    LOCAL MATH
 ============================================================ */
 
-export function solveMath(input) {
+export function solveMath(
+    input
+) {
 
     let expression =
         String(
@@ -141,10 +200,14 @@ export function solveMath(input) {
         ).trim();
 
 
+    /*
+        Remove common natural-language prefixes.
+    */
+
     expression =
         expression
             .replace(
-                /^(calculate|solve|what is|what's)\s+/i,
+                /^(calculate|solve|what\s+is|what's)\s+/i,
                 ""
             )
             .replace(
@@ -154,26 +217,56 @@ export function solveMath(input) {
             .trim();
 
 
+    /*
+        Mathematical symbols.
+    */
+
     expression =
         expression
-            .replace(/×/g, "*")
-            .replace(/÷/g, "/")
-            .replace(/−/g, "-")
-            .replace(/π/gi, "Math.PI");
+            .replace(
+                /×/g,
+                "*"
+            )
+            .replace(
+                /÷/g,
+                "/"
+            )
+            .replace(
+                /−/g,
+                "-"
+            )
+            /*
+                Replace π with its numeric value.
+
+                Do NOT replace it with Math.PI,
+                because the security whitelist below
+                intentionally does not allow property access.
+            */
+            .replace(
+                /π/gi,
+                String(
+                    Math.PI
+                )
+            );
 
 
-    if (!expression) {
+    /*
+        Empty expression.
+    */
+
+    if (
+        !expression
+    ) {
 
         return null;
     }
 
 
     /*
-        Allow only mathematical characters.
+        Only mathematical characters are allowed.
 
-        Math.PI is allowed because π is converted
-        above, but property access is NOT allowed
-        through user input.
+        This prevents arbitrary JavaScript from being
+        executed through the calculator.
     */
 
     if (
@@ -186,12 +279,20 @@ export function solveMath(input) {
     }
 
 
+    /*
+        Convert ^ to JavaScript exponentiation.
+    */
+
     expression =
         expression.replace(
             /\^/g,
             "**"
         );
 
+
+    /*
+        Calculate.
+    */
 
     try {
 
@@ -202,8 +303,18 @@ export function solveMath(input) {
 
 
         if (
-            typeof result !== "number" ||
-            !Number.isFinite(result)
+            typeof result !==
+            "number"
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            !Number.isFinite(
+                result
+            )
         ) {
 
             return null;
@@ -223,7 +334,9 @@ export function solveMath(input) {
    MATH DETECTION
 ============================================================ */
 
-function isMathQuestion(input) {
+function isMathQuestion(
+    input
+) {
 
     const text =
         String(
@@ -231,16 +344,57 @@ function isMathQuestion(input) {
         ).trim();
 
 
-    if (!text) {
+    if (
+        !text
+    ) {
 
         return false;
     }
 
 
+    /*
+        /math is handled separately.
+    */
+
+    if (
+        /^\/math(?:\s|$)/i.test(
+            text
+        )
+    ) {
+
+        return true;
+    }
+
+
+    /*
+        Natural math questions.
+    */
+
     return (
-        /^(calculate|solve|what\s+is|what's)?\s*[-+*/().%\d\s×÷−^]+[?]?$/i
-            .test(text)
+        /^(calculate|solve|what\s+is|what's)?\s*[-+*/().%\d\s×÷−^π]+[?]?$/i
+            .test(
+                text
+            )
     );
+}
+
+
+/* ============================================================
+   EXTRACT MATH EXPRESSION
+============================================================ */
+
+function extractMathExpression(
+    input
+) {
+
+    return String(
+        input || ""
+    )
+        .replace(
+            /^\/math\s*/i,
+            ""
+        )
+        .trim();
 }
 
 
@@ -248,10 +402,14 @@ function isMathQuestion(input) {
    LOCAL KNOWLEDGE
 ============================================================ */
 
-export function localConversation(input) {
+export function localConversation(
+    input
+) {
 
     const text =
-        normalize(input);
+        normalize(
+            input
+        );
 
 
     /* --------------------------------------------------------
@@ -277,9 +435,15 @@ export function localConversation(input) {
     -------------------------------------------------------- */
 
     if (
-        text.includes("who created you") ||
-        text.includes("who made you") ||
-        text.includes("who built you")
+        text.includes(
+            "who created you"
+        ) ||
+        text.includes(
+            "who made you"
+        ) ||
+        text.includes(
+            "who built you"
+        )
     ) {
 
         return (
@@ -295,17 +459,20 @@ export function localConversation(input) {
     -------------------------------------------------------- */
 
     if (
-        text === "what is crazemind"
+        text ===
+        "what is crazemind"
     ) {
 
         return (
             "## CrazeMind\n\n" +
+
             "CrazeMind is an AI project created " +
             "by **CrazeStudio**.\n\n" +
+
             "It has a local memory system, " +
             "training system, search commands, " +
-            "local reasoning, and an optional " +
-            "Gemini fallback."
+            "local reasoning, and a Gemini fallback " +
+            "through a secure Netlify Function."
         );
     }
 
@@ -315,12 +482,15 @@ export function localConversation(input) {
     -------------------------------------------------------- */
 
     if (
-        text === "what is ai" ||
-        text === "what is artificial intelligence"
+        text ===
+        "what is ai" ||
+        text ===
+        "what is artificial intelligence"
     ) {
 
         return (
             "## Artificial Intelligence\n\n" +
+
             "Artificial intelligence (AI) is the " +
             "field of creating computer systems " +
             "that can perform tasks that normally " +
@@ -334,13 +504,16 @@ export function localConversation(input) {
     -------------------------------------------------------- */
 
     if (
-        text === "what is html"
+        text ===
+        "what is html"
     ) {
 
         return (
             "## HTML\n\n" +
+
             "HTML stands for **HyperText Markup " +
             "Language**.\n\n" +
+
             "It provides the structure of web pages."
         );
     }
@@ -351,13 +524,16 @@ export function localConversation(input) {
     -------------------------------------------------------- */
 
     if (
-        text === "what is css"
+        text ===
+        "what is css"
     ) {
 
         return (
             "## CSS\n\n" +
+
             "CSS stands for **Cascading Style " +
             "Sheets**.\n\n" +
+
             "It controls the appearance and layout " +
             "of web pages."
         );
@@ -369,11 +545,13 @@ export function localConversation(input) {
     -------------------------------------------------------- */
 
     if (
-        text === "what is javascript"
+        text ===
+        "what is javascript"
     ) {
 
         return (
             "## JavaScript\n\n" +
+
             "JavaScript is a programming language " +
             "commonly used to create interactive " +
             "websites and web applications."
@@ -386,14 +564,35 @@ export function localConversation(input) {
     -------------------------------------------------------- */
 
     if (
-        text === "what is python"
+        text ===
+        "what is python"
     ) {
 
         return (
             "## Python\n\n" +
+
             "Python is a high-level programming " +
             "language known for its readable syntax " +
             "and large ecosystem."
+        );
+    }
+
+
+    /* --------------------------------------------------------
+       Netlify
+    -------------------------------------------------------- */
+
+    if (
+        text ===
+        "what is netlify"
+    ) {
+
+        return (
+            "## Netlify\n\n" +
+
+            "Netlify is a platform for deploying " +
+            "websites, serverless functions, and " +
+            "modern web applications."
         );
     }
 
@@ -406,90 +605,93 @@ export function localConversation(input) {
    GEMINI API
 ============================================================ */
 
-export async function askGemini(question) {
+/*
+    IMPORTANT:
 
-    if (!GEMINI_API_KEY) {
+    This function does NOT contain an API key.
+
+    It sends the question to the Netlify Function.
+
+    The Netlify Function contains the secure
+    environment-variable access.
+*/
+
+export async function askGemini(
+    question
+) {
+
+    const input =
+        String(
+            question || ""
+        ).trim();
+
+
+    if (
+        !input
+    ) {
 
         throw new Error(
-            "Gemini API key is not configured."
+            "No question provided."
         );
     }
-
-
-    const endpoint =
-        "https://generativelanguage.googleapis.com/" +
-        "v1beta/models/" +
-        GEMINI_MODEL +
-        ":generateContent";
 
 
     let response;
 
 
+    /*
+        Call Netlify Function.
+    */
+
     try {
 
         response =
             await fetch(
-                endpoint,
+                GEMINI_ENDPOINT,
                 {
 
-                    method: "POST",
+                    method:
+                        "POST",
 
                     headers: {
 
                         "Content-Type":
-                            "application/json",
+                            "application/json"
 
-                        "x-goog-api-key":
-                            GEMINI_API_KEY
                     },
 
                     body:
                         JSON.stringify({
 
-                            contents: [
-
-                                {
-
-                                    role: "user",
-
-                                    parts: [
-
-                                        {
-                                            text:
-                                                question
-                                        }
-
-                                    ]
-
-                                }
-
-                            ],
-
-                            generationConfig: {
-
-                                temperature:
-                                    0.7,
-
-                                maxOutputTokens:
-                                    2048
-                            }
+                            question:
+                                input
 
                         })
+
                 }
             );
 
-    } catch (error) {
+    } catch (
+        error
+    ) {
 
         throw new Error(
-            "Network error while contacting Gemini: " +
+
+            "Could not connect to the " +
+            "CrazeMind Gemini server: " +
+
             (
                 error?.message ||
                 String(error)
             )
+
         );
     }
 
+
+    /*
+        Read response.
+    */
 
     const raw =
         await response.text();
@@ -508,53 +710,79 @@ export async function askGemini(question) {
     } catch {
 
         throw new Error(
-            "Gemini returned invalid JSON."
+
+            "CrazeMind server returned " +
+            "invalid JSON."
+
         );
     }
 
+
+    /*
+        HTTP error.
+    */
 
     if (
         !response.ok
     ) {
 
+        const details =
+            data?.details ||
+            data?.error ||
+            `HTTP ${response.status}`;
+
+
         throw new Error(
-            data
-                ?.error
-                ?.message ||
-            `Gemini HTTP ${response.status}`
+            String(
+                details
+            )
         );
     }
 
+
+    /*
+        Extract answer.
+
+        The Netlify Function returns:
+
+        {
+            answer,
+            model,
+            source
+        }
+    */
 
     const answer =
-        data
-            ?.candidates?.[0]
-            ?.content
-            ?.parts
-            ?.map(
-                part =>
-                    part?.text || ""
-            )
-            .join("")
-            .trim();
+        String(
+            data?.answer ||
+            ""
+        ).trim();
 
 
-    if (!answer) {
-
-        const reason =
-            data
-                ?.promptFeedback
-                ?.blockReason ||
-            "Gemini returned no text.";
-
+    if (
+        !answer
+    ) {
 
         throw new Error(
-            reason
+            "Gemini returned an empty answer."
         );
     }
 
 
-    return answer;
+    return {
+
+        answer:
+            answer,
+
+        model:
+            data?.model ||
+            GEMINI_MODEL,
+
+        source:
+            data?.source ||
+            "Gemini"
+
+    };
 }
 
 
@@ -562,7 +790,9 @@ export async function askGemini(question) {
    /SEARCH
 ============================================================ */
 
-async function handleSearch(input) {
+async function handleSearch(
+    input
+) {
 
     const query =
         input
@@ -572,7 +802,9 @@ async function handleSearch(input) {
             .trim();
 
 
-    if (!query) {
+    if (
+        !query
+    ) {
 
         return (
             "Usage: `/search your query`"
@@ -590,34 +822,29 @@ async function handleSearch(input) {
         );
 
 
-    /*
-        Make sure search always produces
-        displayable text.
-    */
-
     if (
         result === null ||
         result === undefined
     ) {
 
-        return "No results found.";
+        return (
+            "No results found."
+        );
     }
 
 
     if (
-        typeof result === "string"
+        typeof result ===
+        "string"
     ) {
 
         return result;
     }
 
 
-    /*
-        Support search.js returning an object.
-    */
-
     if (
-        typeof result === "object"
+        typeof result ===
+        "object"
     ) {
 
         if (
@@ -648,7 +875,9 @@ async function handleSearch(input) {
 
         } catch {
 
-            return "No results found.";
+            return (
+                "No results found."
+            );
         }
     }
 
@@ -663,7 +892,9 @@ async function handleSearch(input) {
    /TRAIN
 ============================================================ */
 
-async function handleTrain(input) {
+async function handleTrain(
+    input
+) {
 
     const argument =
         input
@@ -676,11 +907,6 @@ async function handleTrain(input) {
 
     let amount;
 
-
-    /*
-        0 / full / all =
-        full dataset.
-    */
 
     if (
         argument === "0" ||
@@ -700,7 +926,9 @@ async function handleTrain(input) {
 
 
         if (
-            !Number.isFinite(amount) ||
+            !Number.isFinite(
+                amount
+            ) ||
             amount < 1
         ) {
 
@@ -770,6 +998,7 @@ async function handleTrain(input) {
         `- Examples stored: **${result.trainedExamples ?? 0}**\n` +
 
         `- Mode: **${result.mode ?? "unknown"}**`
+
     );
 }
 
@@ -808,6 +1037,7 @@ async function handleStats() {
         `- Dataset: \`${stats.dataset ?? "unknown"}\`\n` +
 
         `- Mode: **${stats.mode ?? "unknown"}**`
+
     );
 }
 
@@ -826,10 +1056,13 @@ async function handleClear() {
         await clearTraining();
 
 
-    if (success) {
+    if (
+        success
+    ) {
 
         return (
             "## Memory Cleared\n\n" +
+
             "CrazeMind's local training memory " +
             "has been cleared."
         );
@@ -863,10 +1096,230 @@ async function handleDownload() {
 
 
 /* ============================================================
+   /HELP
+============================================================ */
+
+function handleHelp() {
+
+    lastSource =
+        "local";
+
+
+    return (
+
+        "## CrazeMind Commands\n\n" +
+
+        "`/search query` — Search the web\n\n" +
+
+        "`/math expression` — Calculate math\n\n" +
+
+        "`/train 100` — Train on 100 examples\n\n" +
+
+        "`/train full` — Train on the full dataset\n\n" +
+
+        "`/stats` — Show training statistics\n\n" +
+
+        "`/download` — Export training data\n\n" +
+
+        "`/clear` — Clear training memory\n\n" +
+
+        "Normal questions are answered using " +
+        "local knowledge/memory first and Gemini " +
+        "as the fallback."
+
+    );
+}
+
+
+/* ============================================================
+   /ABOUT
+============================================================ */
+
+function handleAbout() {
+
+    lastSource =
+        "local";
+
+
+    return (
+
+        "## CrazeMind\n\n" +
+
+        "**CrazeMind** is an AI project by " +
+        "**CrazeStudio**.\n\n" +
+
+        "It combines local memory, local knowledge, " +
+        "math, training, search, and Gemini fallback " +
+        "through a Netlify serverless function."
+
+    );
+}
+
+
+/* ============================================================
+   /MATH
+============================================================ */
+
+function handleMath(
+    input
+) {
+
+    const expression =
+        extractMathExpression(
+            input
+        );
+
+
+    if (
+        !expression
+    ) {
+
+        lastSource =
+            "local-math";
+
+
+        return (
+            "Usage: `/math 2 + 2`"
+        );
+    }
+
+
+    const result =
+        solveMath(
+            expression
+        );
+
+
+    if (
+        result === null
+    ) {
+
+        lastSource =
+            "local-math";
+
+
+        return (
+            "I couldn't calculate that expression."
+        );
+    }
+
+
+    lastSource =
+        "local-math";
+
+
+    return (
+
+        "## Answer\n\n" +
+
+        `**${result}**`
+
+    );
+}
+
+
+/* ============================================================
+   /WIKI
+============================================================ */
+
+async function handleWiki(
+    input
+) {
+
+    const query =
+        input
+            .slice(
+                "/wiki".length
+            )
+            .trim();
+
+
+    if (
+        !query
+    ) {
+
+        return (
+            "Usage: `/wiki topic`"
+        );
+    }
+
+
+    /*
+        Use search.js if it supports web search.
+    */
+
+    lastSource =
+        "search";
+
+
+    const result =
+        await searchText(
+            query
+        );
+
+
+    if (
+        result === null ||
+        result === undefined
+    ) {
+
+        return (
+            "No Wikipedia/search results found."
+        );
+    }
+
+
+    if (
+        typeof result ===
+        "string"
+    ) {
+
+        return result;
+    }
+
+
+    if (
+        typeof result?.answer ===
+        "string"
+    ) {
+
+        return result.answer;
+    }
+
+
+    if (
+        typeof result?.text ===
+        "string"
+    ) {
+
+        return result.text;
+    }
+
+
+    try {
+
+        return JSON.stringify(
+            result,
+            null,
+            2
+        );
+
+    } catch {
+
+        return (
+            "No Wikipedia results found."
+        );
+    }
+}
+
+
+/* ============================================================
    COMMAND HANDLER
 ============================================================ */
 
-async function handleCommand(input) {
+async function handleCommand(
+    input
+) {
 
     const lower =
         normalize(
@@ -874,9 +1327,15 @@ async function handleCommand(input) {
         );
 
 
+    /* --------------------------------------------------------
+       SEARCH
+    -------------------------------------------------------- */
+
     if (
         lower === "/search" ||
-        lower.startsWith("/search ")
+        lower.startsWith(
+            "/search "
+        )
     ) {
 
         return await handleSearch(
@@ -885,9 +1344,49 @@ async function handleCommand(input) {
     }
 
 
+    /* --------------------------------------------------------
+       WIKI
+    -------------------------------------------------------- */
+
+    if (
+        lower === "/wiki" ||
+        lower.startsWith(
+            "/wiki "
+        )
+    ) {
+
+        return await handleWiki(
+            input
+        );
+    }
+
+
+    /* --------------------------------------------------------
+       MATH
+    -------------------------------------------------------- */
+
+    if (
+        lower === "/math" ||
+        lower.startsWith(
+            "/math "
+        )
+    ) {
+
+        return handleMath(
+            input
+        );
+    }
+
+
+    /* --------------------------------------------------------
+       TRAIN
+    -------------------------------------------------------- */
+
     if (
         lower === "/train" ||
-        lower.startsWith("/train ")
+        lower.startsWith(
+            "/train "
+        )
     ) {
 
         return await handleTrain(
@@ -895,6 +1394,10 @@ async function handleCommand(input) {
         );
     }
 
+
+    /* --------------------------------------------------------
+       STATS
+    -------------------------------------------------------- */
 
     if (
         lower === "/stats"
@@ -904,6 +1407,10 @@ async function handleCommand(input) {
     }
 
 
+    /* --------------------------------------------------------
+       CLEAR
+    -------------------------------------------------------- */
+
     if (
         lower === "/clear"
     ) {
@@ -912,11 +1419,64 @@ async function handleCommand(input) {
     }
 
 
+    /* --------------------------------------------------------
+       DOWNLOAD
+    -------------------------------------------------------- */
+
     if (
         lower === "/download"
     ) {
 
         return await handleDownload();
+    }
+
+
+    /* --------------------------------------------------------
+       HELP
+    -------------------------------------------------------- */
+
+    if (
+        lower === "/help"
+    ) {
+
+        return handleHelp();
+    }
+
+
+    /* --------------------------------------------------------
+       ABOUT
+    -------------------------------------------------------- */
+
+    if (
+        lower === "/about"
+    ) {
+
+        return handleAbout();
+    }
+
+
+    /*
+        Unknown slash command.
+
+        Do not silently send an unknown command
+        to Gemini.
+    */
+
+    if (
+        input.startsWith("/")
+    ) {
+
+        lastSource =
+            "local";
+
+
+        return (
+
+            `Unknown command: \`${input}\`\n\n` +
+
+            "Use `/help` to see available commands."
+
+        );
     }
 
 
@@ -940,20 +1500,20 @@ export async function answerQuestion(
 
 
     /*
-        Reset source for every question.
+        Reset source.
     */
 
     lastSource =
         "local";
 
 
-    /*
-    ============================================================
-    EMPTY QUESTION
-    ============================================================
-    */
+    /* ========================================================
+       EMPTY
+    ======================================================== */
 
-    if (!input) {
+    if (
+        !input
+    ) {
 
         return makeAnswer(
             "Please ask me something.",
@@ -962,11 +1522,9 @@ export async function answerQuestion(
     }
 
 
-    /*
-    ============================================================
-    1. COMMANDS
-    ============================================================
-    */
+    /* ========================================================
+       1. COMMANDS
+    ======================================================== */
 
     if (
         input.startsWith("/")
@@ -981,7 +1539,8 @@ export async function answerQuestion(
 
 
             if (
-                commandResult !== null
+                commandResult !==
+                null
             ) {
 
                 return makeAnswer(
@@ -990,16 +1549,18 @@ export async function answerQuestion(
                 );
             }
 
-        } catch (error) {
-
-            lastSource =
-                "command-error";
-
+        } catch (
+            error
+        ) {
 
             console.error(
                 "[CrazeMind] Command error:",
                 error
             );
+
+
+            lastSource =
+                "command-error";
 
 
             return makeAnswer(
@@ -1026,11 +1587,9 @@ export async function answerQuestion(
     }
 
 
-    /*
-    ============================================================
-    2. LOCAL MEMORY
-    ============================================================
-    */
+    /* ========================================================
+       2. LOCAL MEMORY
+    ======================================================== */
 
     try {
 
@@ -1062,7 +1621,9 @@ export async function answerQuestion(
             );
         }
 
-    } catch (error) {
+    } catch (
+        error
+    ) {
 
         console.warn(
             "[CrazeMind] Local memory error:",
@@ -1071,11 +1632,9 @@ export async function answerQuestion(
     }
 
 
-    /*
-    ============================================================
-    3. LOCAL MATH
-    ============================================================
-    */
+    /* ========================================================
+       3. LOCAL MATH
+    ======================================================== */
 
     if (
         isMathQuestion(
@@ -1083,9 +1642,15 @@ export async function answerQuestion(
         )
     ) {
 
+        const expression =
+            extractMathExpression(
+                input
+            );
+
+
         const result =
             solveMath(
-                input
+                expression
             );
 
 
@@ -1105,6 +1670,7 @@ export async function answerQuestion(
             return makeAnswer(
 
                 "## Answer\n\n" +
+
                 `**${result}**`,
 
                 "local-math"
@@ -1113,11 +1679,9 @@ export async function answerQuestion(
     }
 
 
-    /*
-    ============================================================
-    4. LOCAL KNOWLEDGE
-    ============================================================
-    */
+    /* ========================================================
+       4. LOCAL KNOWLEDGE
+    ======================================================== */
 
     const localAnswer =
         localConversation(
@@ -1139,7 +1703,7 @@ export async function answerQuestion(
 
 
         /*
-            Save local knowledge.
+            Save local answer to memory.
         */
 
         try {
@@ -1149,10 +1713,12 @@ export async function answerQuestion(
                 localAnswer
             );
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.warn(
-                "[CrazeMind] Could not save local knowledge:",
+                "[CrazeMind] Could not save local answer:",
                 error
             );
         }
@@ -1165,80 +1731,60 @@ export async function answerQuestion(
     }
 
 
-    /*
-    ============================================================
-    5. GEMINI FALLBACK
-    ============================================================
-    */
-
-    console.log(
-        "[CrazeMind] LOCAL BRAIN NOT FOUND"
-    );
-
-
-    if (
-        !GEMINI_API_KEY
-    ) {
-
-        lastSource =
-            "unavailable";
-
-
-        return makeAnswer(
-
-            "## I couldn't generate an answer\n\n" +
-
-            "CrazeMind could not find an answer " +
-            "in its local brain, and the Gemini API " +
-            "is not configured.\n\n" +
-
-            "Add `GEMINI_API_KEY` to " +
-            "`window.CRAZEMIND_CONFIG` to enable " +
-            "Gemini fallback.",
-
-            "unavailable"
-        );
-    }
-
+    /* ========================================================
+       5. GEMINI FALLBACK
+    ======================================================== */
 
     try {
-
-        lastSource =
-            "gemini";
-
 
         console.log(
             "[CrazeMind] GEMINI FALLBACK"
         );
 
 
-        const geminiAnswer =
+        const result =
             await askGemini(
                 input
             );
 
 
-        /*
-            Save Gemini answer into local memory.
+        const answer =
+            result?.answer ||
+            "";
 
-            This means the next time the same
-            question is asked, local memory can
-            answer it without Gemini.
+
+        if (
+            !answer.trim()
+        ) {
+
+            throw new Error(
+                "Gemini returned an empty answer."
+            );
+        }
+
+
+        lastSource =
+            "Gemini";
+
+
+        /*
+            Save Gemini answer to local memory.
+
+            This means the next time a similar
+            question is asked, CrazeMind may answer
+            from local memory instead of calling Gemini.
         */
 
         try {
 
             await learn(
                 input,
-                geminiAnswer
+                answer
             );
 
-
-            console.log(
-                "[CrazeMind] GEMINI ANSWER SAVED"
-            );
-
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.warn(
                 "[CrazeMind] Could not save Gemini answer:",
@@ -1248,30 +1794,32 @@ export async function answerQuestion(
 
 
         return makeAnswer(
-            geminiAnswer,
-            "gemini"
+            answer,
+            "Gemini"
         );
 
-    } catch (error) {
-
-        lastSource =
-            "gemini-error";
-
+    } catch (
+        error
+    ) {
 
         console.error(
-            "[CrazeMind] Gemini error:",
+            "[CrazeMind] Gemini fallback failed:",
             error
         );
+
+
+        lastSource =
+            "error";
 
 
         return makeAnswer(
 
             "## I couldn't generate an answer\n\n" +
 
-            "CrazeMind could not find an answer " +
-            "locally and Gemini could not generate one.\n\n" +
+            "CrazeMind couldn't answer this locally, " +
+            "and the Gemini fallback failed.\n\n" +
 
-            "**Error:** `" +
+            "**Reason:** `" +
 
             String(
                 error?.message ||
@@ -1285,7 +1833,7 @@ export async function answerQuestion(
 
             "`",
 
-            "gemini-error"
+            "error"
         );
     }
 }
