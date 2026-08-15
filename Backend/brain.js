@@ -1,373 +1,469 @@
 /*
 ============================================================
 CrazeMind Brain
-Brand: CrazeStudio
+CrazeStudio
+============================================================
+
+Priority:
+
+1. Commands
+2. Local memory
+3. Local reasoning
+4. Math engine
+5. Gemini fallback
+
+Gemini is NOT used for every question.
 ============================================================
 */
 
 import {
+    recall,
+    learn,
     trainCrazeMind,
-    downloadWeights,
     getTrainingStats,
-    recall
+    downloadWeights,
+    clearTraining
 } from "./trainer.js";
 
-
-const AI_NAME = "CrazeMind";
-const BRAND = "CrazeStudio";
-
-
-/* ============================================================
-   OPTIONAL MODULES
-============================================================ */
-
-let modelModule = null;
-let searchModule = null;
-let basicModule = null;
-
-
-try {
-    modelModule = await import("./model.js");
-} catch (error) {
-    console.warn("model.js unavailable:", error);
-}
-
-
-try {
-    searchModule = await import("./search.js");
-} catch (error) {
-    console.warn("search.js unavailable:", error);
-}
-
-
-try {
-    basicModule = await import("./basic.js");
-} catch (error) {
-    console.warn("basic.js unavailable:", error);
-}
+import {
+    searchText
+} from "./search.js";
 
 
 /* ============================================================
-   HELPERS
+   BASIC HELPERS
 ============================================================ */
 
-function cleanText(text) {
-    return String(text || "").trim();
-}
-
-
-function commandOf(text) {
-
-    const value = cleanText(text);
-
-    if (!value.startsWith("/")) {
-        return null;
-    }
-
-    return value
-        .split(/\s+/)[0]
-        .slice(1)
+function clean(text) {
+    return String(text || "")
+        .trim()
         .toLowerCase();
 }
 
 
-function argumentsOf(text) {
-
-    const parts =
-        cleanText(text).split(/\s+/);
-
-    parts.shift();
-
-    return parts.join(" ").trim();
-}
-
-
 /* ============================================================
-   HELP
+   LOCAL MATH ENGINE
 ============================================================ */
 
-function help() {
+function solveMath(input) {
 
-    return `
-# ${AI_NAME}
+    let expression =
+        String(input || "")
+            .trim();
 
-Created by **${BRAND}**.
+    /*
+    Remove common natural-language prefixes.
+    */
 
-## Commands
-
-- \`/train 100\` — train 100 rows
-- \`/train 1000\` — train 1000 rows
-- \`/train full\` — train the whole dataset
-- \`/train all\` — train the whole dataset
-- \`/train 0\` — train the whole dataset
-- \`/stats\` — training statistics
-- \`/export\` — export learned data
-- \`/search <query>\` — web search
-- \`/wiki <topic>\` — Wikipedia
-- \`/math <expression>\` — calculate
-- \`/about\` — about CrazeMind
-- \`/help\` — commands
-`;
-}
+    expression =
+        expression
+            .replace(
+                /^(calculate|solve|what is|what's)\s+/i,
+                ""
+            )
+            .replace(
+                /\?+$/,
+                ""
+            )
+            .trim();
 
 
-/* ============================================================
-   ABOUT
-============================================================ */
+    /*
+    Convert common math symbols.
+    */
 
-function about() {
-
-    return `
-# ${AI_NAME}
-
-**Brand:** ${BRAND}
-
-CrazeMind is a JavaScript AI project using local
-training/retrieval, Llama-Instruct data, search,
-mathematics and model generation.
-
-**Created by:** ${BRAND}
-`;
-}
+    expression =
+        expression
+            .replace(/×/g, "*")
+            .replace(/÷/g, "/")
+            .replace(/−/g, "-")
+            .replace(/π/gi, "Math.PI");
 
 
-/* ============================================================
-   MATH
-============================================================ */
+    /*
+    Allow only a safe mathematical character set.
+    */
 
-function math(expression) {
-
-    let exp = cleanText(expression);
-
-    if (!exp) {
-        return "Usage: `/math 25 * 25`";
+    if (
+        !/^[0-9+\-*/().%\s^MathPI]+$/i.test(
+            expression
+        )
+    ) {
+        return null;
     }
 
-    exp = exp
-        .replace(/×/g, "*")
-        .replace(/÷/g, "/")
-        .replace(/−/g, "-")
-        .replace(/\^/g, "**");
 
-    if (!/^[0-9+\-*/%().\s*]+$/.test(exp)) {
-        return "Invalid mathematical expression.";
+    /*
+    Don't evaluate suspicious JavaScript.
+    */
+
+    if (
+        /(?:constructor|window|document|globalThis|eval|function|=>)/i
+            .test(expression)
+    ) {
+        return null;
     }
+
 
     try {
 
+        /*
+        Exponent operator.
+        */
+
+        expression =
+            expression.replace(
+                /\^/g,
+                "**"
+            );
+
+
         const result =
             Function(
-                `"use strict"; return (${exp})`
+                `"use strict"; return (${expression})`
             )();
+
 
         if (
             typeof result !== "number" ||
             !Number.isFinite(result)
         ) {
-            throw new Error("Invalid result");
+            return null;
         }
 
-        return `## Result\n\n\`${result}\``;
+
+        return result;
 
     } catch {
-        return "I couldn't calculate that.";
+
+        return null;
     }
 }
 
 
 /* ============================================================
-   SEARCH
+   DETECT MATH
 ============================================================ */
 
-async function search(query) {
+function isMathQuestion(input) {
+
+    const text =
+        String(input || "")
+            .trim();
+
+
+    if (
+        !text
+    ) {
+        return false;
+    }
+
+
+    /*
+    Examples:
+
+    25 + 50
+    293 * 847
+    what is 50 × 20
+    calculate 25^2
+    */
+
+    return (
+        /^(calculate|solve|what\s+is|what's)?\s*[-+*/().%\d\s×÷−^]+[?]?$/i
+            .test(text)
+    );
+}
+
+
+/* ============================================================
+   LOCAL CONVERSATION BRAIN
+============================================================ */
+
+function localConversation(
+    input
+) {
+
+    const text =
+        clean(input);
+
+
+    if (
+        /^(hello|hi|hey|yo|hii|helo)$/.test(
+            text
+        )
+    ) {
+
+        return (
+            "Hello! I'm **CrazeMind**, created by **CrazeStudio**. " +
+            "How can I help?"
+        );
+    }
+
+
+    if (
+        text.includes(
+            "who created you"
+        ) ||
+        text.includes(
+            "who made you"
+        ) ||
+        text.includes(
+            "who built you"
+        )
+    ) {
+
+        return (
+            "## CrazeMind\n\n" +
+            "I'm **CrazeMind**, an AI project created by **CrazeStudio**."
+        );
+    }
+
+
+    if (
+        text === "what is crazemind"
+    ) {
+
+        return (
+            "## CrazeMind\n\n" +
+            "CrazeMind is an AI project created by **CrazeStudio**. " +
+            "It uses local memory, local reasoning, training data, " +
+            "and optional AI fallback."
+        );
+    }
+
+
+    if (
+        text === "what is ai" ||
+        text ===
+            "what is artificial intelligence"
+    ) {
+
+        return (
+            "## Artificial Intelligence\n\n" +
+            "Artificial intelligence (AI) is the field of " +
+            "creating computer systems that can perform tasks " +
+            "that normally require human intelligence."
+        );
+    }
+
+
+    if (
+        text === "what is html"
+    ) {
+
+        return (
+            "## HTML\n\n" +
+            "HTML stands for **HyperText Markup Language**. " +
+            "It provides the structure of web pages."
+        );
+    }
+
+
+    if (
+        text === "what is css"
+    ) {
+
+        return (
+            "## CSS\n\n" +
+            "CSS stands for **Cascading Style Sheets**. " +
+            "It controls the appearance and layout of web pages."
+        );
+    }
+
+
+    if (
+        text === "what is javascript"
+    ) {
+
+        return (
+            "## JavaScript\n\n" +
+            "JavaScript is a programming language commonly " +
+            "used to create interactive websites and applications."
+        );
+    }
+
+
+    if (
+        text === "what is python"
+    ) {
+
+        return (
+            "## Python\n\n" +
+            "Python is a high-level programming language " +
+            "known for its readable syntax."
+        );
+    }
+
+
+    return null;
+}
+
+
+/* ============================================================
+   GEMINI FALLBACK
+============================================================ */
+
+async function askGemini(
+    question
+) {
+
+    const response =
+        await fetch(
+            "/api/gemini",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                body:
+                    JSON.stringify({
+                        prompt:
+                            question
+                    })
+            }
+        );
+
+
+    const text =
+        await response.text();
+
+
+    if (
+        !response.ok
+    ) {
+
+        let message =
+            text ||
+            "Gemini request failed.";
+
+
+        try {
+
+            const data =
+                JSON.parse(
+                    text
+                );
+
+
+            message =
+                data.details ||
+                data.error ||
+                message;
+
+        } catch {}
+
+
+        throw new Error(
+            message
+        );
+    }
+
+
+    const data =
+        JSON.parse(
+            text
+        );
+
+
+    if (
+        !data.answer
+    ) {
+
+        throw new Error(
+            "Gemini returned no answer."
+        );
+    }
+
+
+    return String(
+        data.answer
+    ).trim();
+}
+
+
+/* ============================================================
+   /SEARCH
+============================================================ */
+
+async function handleSearch(
+    input
+) {
+
+    const query =
+        input
+            .slice(7)
+            .trim();
+
 
     if (!query) {
-        return {
-            answer: "Usage: `/search your query`",
-            sources: []
-        };
+
+        return (
+            "Usage: `/search your query`"
+        );
     }
 
-    if (!searchModule) {
-        return {
-            answer: "Search module is unavailable.",
-            sources: []
-        };
-    }
 
-    const fn =
-        searchModule.search ||
-        searchModule.webSearch ||
-        searchModule.searchWeb ||
-        searchModule.default;
-
-    if (typeof fn !== "function") {
-        return {
-            answer:
-                "search.js does not export a search function.",
-            sources: []
-        };
-    }
-
-    try {
-
-        const result =
-            await fn(query);
-
-        if (typeof result === "string") {
-
-            return {
-                answer: result,
-                sources: []
-            };
-        }
-
-        return {
-            answer:
-                result?.answer ||
-                result?.text ||
-                result?.content ||
-                "No results found.",
-
-            sources:
-                result?.sources ||
-                result?.urls ||
-                []
-        };
-
-    } catch (error) {
-
-        return {
-            answer:
-                `## Search Error\n\n\`${error.message}\``,
-            sources: []
-        };
-    }
+    return await searchText(
+        query
+    );
 }
 
 
 /* ============================================================
-   WIKIPEDIA
+   /TRAIN
 ============================================================ */
 
-async function wiki(query) {
+async function handleTrain(
+    input
+) {
 
-    if (!query) {
+    const argument =
+        input
+            .slice(6)
+            .trim()
+            .toLowerCase();
 
-        return {
-            answer:
-                "Usage: `/wiki topic`",
-            sources: []
-        };
-    }
-
-    try {
-
-        const url =
-            "https://en.wikipedia.org/api/rest_v1/page/summary/" +
-            encodeURIComponent(query);
-
-        const response =
-            await fetch(url);
-
-        if (!response.ok) {
-            throw new Error(
-                `Wikipedia returned ${response.status}`
-            );
-        }
-
-        const data =
-            await response.json();
-
-        const page =
-            data?.content_urls?.desktop?.page;
-
-        return {
-
-            answer:
-                `# ${data.title || query}\n\n` +
-                (
-                    data.description
-                        ? `*${data.description}*\n\n`
-                        : ""
-                ) +
-                (
-                    data.extract ||
-                    "No summary available."
-                ),
-
-            sources:
-                page ? [page] : []
-        };
-
-    } catch (error) {
-
-        return {
-
-            answer:
-                `## Wikipedia Error\n\n\`${error.message}\``,
-
-            sources: []
-        };
-    }
-}
-
-
-/* ============================================================
-   TRAIN
-============================================================ */
-
-async function train(argument) {
-
-    const value =
-        cleanText(argument).toLowerCase();
 
     let amount;
 
-    /*
-       FULL DATASET
-    */
 
     if (
-        value === "full" ||
-        value === "all" ||
-        value === "0"
+        argument === "full" ||
+        argument === "all" ||
+        argument === "0"
     ) {
 
         amount = 0;
 
-    } else if (!value) {
-
-        amount = 20;
-
     } else {
 
-        amount = Number(value);
+        amount =
+            Number(
+                argument
+            );
+
 
         if (
-            !Number.isFinite(amount) ||
-            amount < 0
+            !Number.isFinite(
+                amount
+            ) ||
+            amount < 1
         ) {
 
-            return {
-
-                answer:
-                    "## Training Error\n\n" +
-                    "Use `/train 100` or `/train full`.",
-
-                sources: []
-            };
+            amount = 100;
         }
     }
 
 
-    try {
-
-        const result =
-            await trainCrazeMind(
-                amount,
-                {
-                    onProgress(progress) {
+    const result =
+        await trainCrazeMind(
+            amount,
+            {
+                onProgress:
+                    progress => {
 
                         console.log(
                             "[CrazeMind]",
@@ -375,487 +471,390 @@ async function train(argument) {
                         );
 
 
-                        /*
-                           Your HTML can listen to this.
-                        */
-
                         if (
-                            typeof window !== "undefined" &&
+                            typeof window !==
+                            "undefined" &&
                             typeof window
-                                .onCrazeTrainingProgress ===
+                                .onCrazeMindTrainingProgress ===
                                 "function"
                         ) {
 
                             window
-                                .onCrazeTrainingProgress(
+                                .onCrazeMindTrainingProgress(
                                     progress
                                 );
                         }
                     }
-                }
-            );
-
-
-        return {
-
-            answer:
-                result.wholeDataset
-
-                    ? (
-                        `# Full Training Complete\n\n` +
-                        `CrazeMind processed the whole available dataset.\n\n` +
-                        `- Dataset rows: **${result.datasetRows}**\n` +
-                        `- Examples learned: **${result.trainedExamples}**\n` +
-                        `- Dataset: \`${result.dataset}\`\n` +
-                        `- Split: \`${result.split}\`\n` +
-                        `- Storage: **IndexedDB**`
-                    )
-
-                    : (
-                        `# Training Complete\n\n` +
-                        `- Dataset rows: **${result.datasetRows}**\n` +
-                        `- Examples learned: **${result.trainedExamples}**\n` +
-                        `- Dataset: \`${result.dataset}\`\n` +
-                        `- Storage: **IndexedDB**`
-                    ),
-
-            sources: []
-        };
-
-    } catch (error) {
-
-        console.error(
-            "CrazeMind training error:",
-            error
+            }
         );
 
-        return {
 
-            answer:
-                `## Training Error\n\n` +
-                `\`${error.message}\``,
+    return (
+        "## Training Complete\n\n" +
 
-            sources: []
-        };
-    }
+        `- Dataset: \`${result.dataset}\`\n` +
+
+        `- Rows processed: **${result.datasetRows}**\n` +
+
+        `- Examples stored: **${result.trainedExamples}**\n` +
+
+        `- Mode: **${result.mode}**`
+    );
 }
 
 
 /* ============================================================
-   STATS
+   /STATS
 ============================================================ */
 
-async function stats() {
+async function handleStats() {
 
-    try {
+    const stats =
+        await getTrainingStats();
 
-        const result =
-            await getTrainingStats();
 
-        return {
+    return (
+        "## CrazeMind Brain\n\n" +
 
-            answer:
-                `# CrazeMind Training\n\n` +
-                `**Examples:** ${result.examples}\n\n` +
-                `**Dataset:** \`${result.dataset}\`\n\n` +
-                `**Mode:** \`${result.mode}\``,
+        `- Stored examples: **${stats.examples}**\n` +
 
-            sources: []
-        };
+        `- Dataset: \`${stats.dataset}\`\n` +
 
-    } catch (error) {
-
-        return {
-
-            answer:
-                `## Stats Error\n\n\`${error.message}\``,
-
-            sources: []
-        };
-    }
+        `- Mode: **${stats.mode}**`
+    );
 }
 
 
 /* ============================================================
-   EXPORT
+   /CLEAR
 ============================================================ */
 
-async function exportData() {
+async function handleClear() {
 
-    try {
+    await clearTraining();
 
-        await downloadWeights();
 
-        return {
-
-            answer:
-                "# Export Complete\n\n" +
-                "Downloaded **crazemind-training.json**.",
-
-            sources: []
-        };
-
-    } catch (error) {
-
-        return {
-
-            answer:
-                `## Export Error\n\n\`${error.message}\``,
-
-            sources: []
-        };
-    }
+    return (
+        "## Memory Cleared\n\n" +
+        "CrazeMind's local training memory has been cleared."
+    );
 }
 
 
 /* ============================================================
-   MODEL
+   /DOWNLOAD
 ============================================================ */
 
-async function modelAnswer(question) {
+async function handleDownload() {
 
-    if (!modelModule) {
-        return null;
-    }
+    await downloadWeights();
 
-    const functions = [
 
-        modelModule.generate,
-        modelModule.generateText,
-        modelModule.predict,
-        modelModule.answer,
-        modelModule.brain,
-        modelModule.default
-
-    ];
-
-    for (const fn of functions) {
-
-        if (typeof fn !== "function") {
-            continue;
-        }
-
-        try {
-
-            const result =
-                await fn(question);
-
-            if (
-                typeof result === "string" &&
-                result.trim()
-            ) {
-
-                return result;
-            }
-
-            if (
-                result &&
-                typeof result === "object"
-            ) {
-
-                return (
-                    result.answer ||
-                    result.text ||
-                    result.output ||
-                    result.response ||
-                    null
-                );
-            }
-
-        } catch (error) {
-
-            console.warn(
-                "Model error:",
-                error
-            );
-        }
-    }
-
-    return null;
+    return (
+        "Training data exported as `crazemind-training.json`."
+    );
 }
 
 
 /* ============================================================
-   BASIC
+   COMMAND HANDLER
 ============================================================ */
 
-async function basicAnswer(question) {
+async function handleCommand(
+    input
+) {
 
-    if (!basicModule) {
-        return null;
-    }
+    const lower =
+        clean(input);
 
-    const functions = [
-
-        basicModule.answer,
-        basicModule.basicAnswer,
-        basicModule.respond,
-        basicModule.generate,
-        basicModule.default
-
-    ];
-
-    for (const fn of functions) {
-
-        if (typeof fn !== "function") {
-            continue;
-        }
-
-        try {
-
-            const result =
-                await fn(question);
-
-            if (
-                typeof result === "string" &&
-                result.trim()
-            ) {
-
-                return result;
-            }
-
-            if (
-                result &&
-                typeof result === "object"
-            ) {
-
-                return (
-                    result.answer ||
-                    result.text ||
-                    result.output ||
-                    null
-                );
-            }
-
-        } catch (error) {
-
-            console.warn(
-                "Basic engine error:",
-                error
-            );
-        }
-    }
-
-    return null;
-}
-
-
-/* ============================================================
-   COMMAND ROUTER
-============================================================ */
-
-async function handleCommand(input) {
-
-    const command =
-        commandOf(input);
-
-    const argument =
-        argumentsOf(input);
-
-
-    switch (command) {
-
-        case "help":
-            return {
-                answer: help(),
-                sources: []
-            };
-
-
-        case "about":
-            return {
-                answer: about(),
-                sources: []
-            };
-
-
-        case "train":
-            return await train(argument);
-
-
-        case "stats":
-            return await stats();
-
-
-        case "export":
-            return await exportData();
-
-
-        case "math":
-            return {
-                answer: math(argument),
-                sources: []
-            };
-
-
-        case "search":
-            return await search(argument);
-
-
-        case "wiki":
-        case "wikipedia":
-            return await wiki(argument);
-
-
-        default:
-            return {
-                answer:
-                    `Unknown command \`/${command}\`.\n\n` +
-                    `Use \`/help\`.`,
-                sources: []
-            };
-    }
-}
-
-
-/* ============================================================
-   ⭐ PUBLIC API
-============================================================ */
-
-/*
-   THIS IS THE IMPORTANT PART.
-
-   Your frontend can now do:
-
-   import {
-       answerQuestion
-   } from "../Backend/brain.js";
-*/
-
-export async function answerQuestion(question) {
-
-    const input =
-        cleanText(question);
-
-    if (!input) {
-
-        return {
-
-            answer:
-                "Please enter a question.",
-
-            sources: []
-        };
-    }
-
-
-    /* Commands */
 
     if (
-        input.startsWith("/")
+        lower.startsWith(
+            "/search"
+        )
     ) {
 
-        return await handleCommand(
+        return await handleSearch(
             input
         );
     }
 
 
-    /* Trained knowledge */
+    if (
+        lower.startsWith(
+            "/train"
+        )
+    ) {
 
-    try {
-
-        const learned =
-            await recall(input);
-
-        if (learned) {
-
-            return {
-
-                answer: learned,
-
-                sources:
-                    ["CrazeMind Training"]
-            };
-        }
-
-    } catch (error) {
-
-        console.warn(
-            "Recall error:",
-            error
+        return await handleTrain(
+            input
         );
     }
 
 
-    /* Model */
+    if (
+        lower ===
+        "/stats"
+    ) {
 
-    try {
-
-        const generated =
-            await modelAnswer(input);
-
-        if (generated) {
-
-            return {
-
-                answer: generated,
-
-                sources: []
-            };
-        }
-
-    } catch (error) {
-
-        console.warn(
-            "Model error:",
-            error
-        );
+        return await handleStats();
     }
 
 
-    /* Basic engine */
+    if (
+        lower ===
+        "/clear"
+    ) {
 
-    try {
-
-        const basic =
-            await basicAnswer(input);
-
-        if (basic) {
-
-            return {
-
-                answer: basic,
-
-                sources: []
-            };
-        }
-
-    } catch (error) {
-
-        console.warn(
-            "Basic error:",
-            error
-        );
+        return await handleClear();
     }
 
 
-    /* Final fallback */
+    if (
+        lower ===
+        "/download"
+    ) {
 
-    return {
+        return await handleDownload();
+    }
 
-        answer:
-            `I don't know that yet.\n\n` +
-            `Try \`/search ${input}\` or train me with \`/train 100\`.`,
-        
-        sources: []
-    };
+
+    return null;
 }
 
 
 /* ============================================================
-   NAMED EXPORTS
+   MAIN BRAIN
 ============================================================ */
 
-export const brain =
-    answerQuestion;
+export async function answerQuestion(
+    question,
+    options = {}
+) {
 
-export const ask =
-    answerQuestion;
+    const input =
+        String(
+            question || ""
+        ).trim();
+
+
+    if (!input) {
+
+        return (
+            "Please ask me something."
+        );
+    }
+
+
+    /*
+    ============================================================
+    1. COMMANDS
+    ============================================================
+    */
+
+    if (
+        input.startsWith("/")
+    ) {
+
+        const commandResult =
+            await handleCommand(
+                input
+            );
+
+
+        if (
+            commandResult !== null
+        ) {
+
+            return commandResult;
+        }
+    }
+
+
+    /*
+    ============================================================
+    2. LOCAL MEMORY
+    ============================================================
+    */
+
+    try {
+
+        const remembered =
+            await recall(
+                input
+            );
+
+
+        if (
+            remembered &&
+            String(
+                remembered
+            ).trim()
+        ) {
+
+            console.log(
+                "[CrazeMind] ✓ Local memory"
+            );
+
+
+            return remembered;
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "[CrazeMind] Memory error:",
+            error
+        );
+    }
+
+
+    /*
+    ============================================================
+    3. LOCAL MATH
+    ============================================================
+    */
+
+    if (
+        isMathQuestion(
+            input
+        )
+    ) {
+
+        const result =
+            solveMath(
+                input
+            );
+
+
+        if (
+            result !== null
+        ) {
+
+            console.log(
+                "[CrazeMind] ✓ Local math engine"
+            );
+
+
+            return (
+                `## Answer\n\n` +
+                `**${result}**`
+            );
+        }
+    }
+
+
+    /*
+    ============================================================
+    4. LOCAL KNOWLEDGE
+    ============================================================
+    */
+
+    const localAnswer =
+        localConversation(
+            input
+        );
+
+
+    if (
+        localAnswer
+    ) {
+
+        console.log(
+            "[CrazeMind] ✓ Local reasoning"
+        );
+
+
+        return localAnswer;
+    }
+
+
+    /*
+    ============================================================
+    5. GEMINI FALLBACK
+    ============================================================
+    */
+
+    if (
+        options.useAI === false
+    ) {
+
+        return (
+            "I couldn't find that in my local brain."
+        );
+    }
+
+
+    console.log(
+        "[CrazeMind] → Gemini fallback"
+    );
+
+
+    try {
+
+        const answer =
+            await askGemini(
+                input
+            );
+
+
+        /*
+        Save Gemini's answer so that
+        CrazeMind can recall it later.
+        */
+
+        try {
+
+            await learn(
+                input,
+                answer
+            );
+
+        } catch (error) {
+
+            console.warn(
+                "[CrazeMind] Could not save AI answer:",
+                error
+            );
+        }
+
+
+        return answer;
+
+    } catch (error) {
+
+        console.error(
+            "[CrazeMind] Gemini error:",
+            error
+        );
+
+
+        return (
+            "## Not found\n\n" +
+
+            "I couldn't find an answer in my " +
+            "local CrazeMind brain.\n\n" +
+
+            "Gemini fallback is currently unavailable."
+        );
+    }
+}
 
 
 /* ============================================================
-   DEFAULT EXPORT
+   EXPORTS
 ============================================================ */
 
-export default answerQuestion;
+export {
+    askGemini,
+    solveMath,
+    localConversation
+};
+
+
+export default {
+    answerQuestion,
+    askGemini,
+    solveMath,
+    localConversation
+};
