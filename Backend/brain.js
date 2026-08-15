@@ -12,7 +12,7 @@ brain.js
   ↓
 Commands
   ↓
-Local IndexedDB memory
+Local memory
   ↓
 Local math
   ↓
@@ -25,18 +25,13 @@ Gemini API
 Save Gemini answer to local memory
 
 IMPORTANT:
-
 The Gemini API key is NEVER stored in this file.
 
-The browser calls:
-
-/.netlify/functions/gemini
-
-The Netlify Function reads:
+The key exists only as:
 
 GEMINI_API_KEY
 
-from the Netlify environment.
+inside Netlify Environment Variables.
 
 ============================================================
 */
@@ -55,7 +50,6 @@ import {
     clearTraining
 } from "./trainer.js";
 
-
 import {
     searchText
 } from "./search.js";
@@ -66,36 +60,28 @@ import {
 ============================================================ */
 
 /*
-    Netlify Function endpoint.
+   Netlify Function.
 
-    If the site is:
+   IMPORTANT:
+   This works when the website itself is deployed on Netlify.
 
-    https://crazestudio.netlify.app
+   Function:
+   netlify/functions/gemini.js
 
-    the browser calls:
-
-    https://crazestudio.netlify.app/.netlify/functions/gemini
-
-    Using a relative URL also works with custom domains.
+   URL:
+   /.netlify/functions/gemini
 */
 
 const GEMINI_ENDPOINT =
     "/.netlify/functions/gemini";
 
 
-/*
-    Stable Gemini model.
-
-    The actual Gemini API call is performed
-    by the Netlify Function.
-*/
-
 const GEMINI_MODEL =
     "gemini-2.5-flash";
 
 
 /* ============================================================
-   INTERNAL STATE
+   STATE
 ============================================================ */
 
 let lastSource =
@@ -103,7 +89,7 @@ let lastSource =
 
 
 /* ============================================================
-   GET LAST SOURCE
+   SOURCE
 ============================================================ */
 
 export function getLastAnswerSource() {
@@ -116,9 +102,7 @@ export function getLastAnswerSource() {
    NORMALIZE
 ============================================================ */
 
-function normalize(
-    text
-) {
+function normalize(text) {
 
     return String(
         text || ""
@@ -133,7 +117,7 @@ function normalize(
 
 
 /* ============================================================
-   CREATE ANSWER OBJECT
+   ANSWER OBJECT
 ============================================================ */
 
 function makeAnswer(
@@ -190,19 +174,13 @@ function makeAnswer(
    LOCAL MATH
 ============================================================ */
 
-export function solveMath(
-    input
-) {
+export function solveMath(input) {
 
     let expression =
         String(
             input || ""
         ).trim();
 
-
-    /*
-        Remove common natural-language prefixes.
-    */
 
     expression =
         expression
@@ -216,10 +194,6 @@ export function solveMath(
             )
             .trim();
 
-
-    /*
-        Mathematical symbols.
-    */
 
     expression =
         expression
@@ -235,13 +209,6 @@ export function solveMath(
                 /−/g,
                 "-"
             )
-            /*
-                Replace π with its numeric value.
-
-                Do NOT replace it with Math.PI,
-                because the security whitelist below
-                intentionally does not allow property access.
-            */
             .replace(
                 /π/gi,
                 String(
@@ -249,10 +216,6 @@ export function solveMath(
                 )
             );
 
-
-    /*
-        Empty expression.
-    */
 
     if (
         !expression
@@ -263,10 +226,8 @@ export function solveMath(
 
 
     /*
-        Only mathematical characters are allowed.
-
-        This prevents arbitrary JavaScript from being
-        executed through the calculator.
+       Security:
+       Only mathematical characters are accepted.
     */
 
     if (
@@ -279,20 +240,12 @@ export function solveMath(
     }
 
 
-    /*
-        Convert ^ to JavaScript exponentiation.
-    */
-
     expression =
         expression.replace(
             /\^/g,
             "**"
         );
 
-
-    /*
-        Calculate.
-    */
 
     try {
 
@@ -334,9 +287,7 @@ export function solveMath(
    MATH DETECTION
 ============================================================ */
 
-function isMathQuestion(
-    input
-) {
+function isMathQuestion(input) {
 
     const text =
         String(
@@ -352,10 +303,6 @@ function isMathQuestion(
     }
 
 
-    /*
-        /math is handled separately.
-    */
-
     if (
         /^\/math(?:\s|$)/i.test(
             text
@@ -365,10 +312,6 @@ function isMathQuestion(
         return true;
     }
 
-
-    /*
-        Natural math questions.
-    */
 
     return (
         /^(calculate|solve|what\s+is|what's)?\s*[-+*/().%\d\s×÷−^π]+[?]?$/i
@@ -380,12 +323,10 @@ function isMathQuestion(
 
 
 /* ============================================================
-   EXTRACT MATH EXPRESSION
+   MATH EXPRESSION
 ============================================================ */
 
-function extractMathExpression(
-    input
-) {
+function extractMathExpression(input) {
 
     return String(
         input || ""
@@ -402,9 +343,7 @@ function extractMathExpression(
    LOCAL KNOWLEDGE
 ============================================================ */
 
-export function localConversation(
-    input
-) {
+export function localConversation(input) {
 
     const text =
         normalize(
@@ -412,9 +351,9 @@ export function localConversation(
         );
 
 
-    /* --------------------------------------------------------
-       Greetings
-    -------------------------------------------------------- */
+    /* ========================================================
+       GREETINGS
+    ======================================================== */
 
     if (
         /^(hello|hi|hey|hii|helo|yo)$/.test(
@@ -430,9 +369,9 @@ export function localConversation(
     }
 
 
-    /* --------------------------------------------------------
-       Creator
-    -------------------------------------------------------- */
+    /* ========================================================
+       CREATOR
+    ======================================================== */
 
     if (
         text.includes(
@@ -454,9 +393,9 @@ export function localConversation(
     }
 
 
-    /* --------------------------------------------------------
-       CrazeMind
-    -------------------------------------------------------- */
+    /* ========================================================
+       CRAZEMIND
+    ======================================================== */
 
     if (
         text ===
@@ -469,21 +408,19 @@ export function localConversation(
             "CrazeMind is an AI project created " +
             "by **CrazeStudio**.\n\n" +
 
-            "It has a local memory system, " +
-            "training system, search commands, " +
-            "local reasoning, and a Gemini fallback " +
-            "through a secure Netlify Function."
+            "It combines local memory, local " +
+            "knowledge, math, training, search, " +
+            "and Gemini through a Netlify Function."
         );
     }
 
 
-    /* --------------------------------------------------------
+    /* ========================================================
        AI
-    -------------------------------------------------------- */
+    ======================================================== */
 
     if (
-        text ===
-        "what is ai" ||
+        text === "what is ai" ||
         text ===
         "what is artificial intelligence"
     ) {
@@ -499,9 +436,9 @@ export function localConversation(
     }
 
 
-    /* --------------------------------------------------------
+    /* ========================================================
        HTML
-    -------------------------------------------------------- */
+    ======================================================== */
 
     if (
         text ===
@@ -519,9 +456,9 @@ export function localConversation(
     }
 
 
-    /* --------------------------------------------------------
+    /* ========================================================
        CSS
-    -------------------------------------------------------- */
+    ======================================================== */
 
     if (
         text ===
@@ -540,9 +477,9 @@ export function localConversation(
     }
 
 
-    /* --------------------------------------------------------
-       JavaScript
-    -------------------------------------------------------- */
+    /* ========================================================
+       JAVASCRIPT
+    ======================================================== */
 
     if (
         text ===
@@ -559,9 +496,9 @@ export function localConversation(
     }
 
 
-    /* --------------------------------------------------------
-       Python
-    -------------------------------------------------------- */
+    /* ========================================================
+       PYTHON
+    ======================================================== */
 
     if (
         text ===
@@ -578,47 +515,15 @@ export function localConversation(
     }
 
 
-    /* --------------------------------------------------------
-       Netlify
-    -------------------------------------------------------- */
-
-    if (
-        text ===
-        "what is netlify"
-    ) {
-
-        return (
-            "## Netlify\n\n" +
-
-            "Netlify is a platform for deploying " +
-            "websites, serverless functions, and " +
-            "modern web applications."
-        );
-    }
-
-
     return null;
 }
 
 
 /* ============================================================
-   GEMINI API
+   GEMINI
 ============================================================ */
 
-/*
-    IMPORTANT:
-
-    This function does NOT contain an API key.
-
-    It sends the question to the Netlify Function.
-
-    The Netlify Function contains the secure
-    environment-variable access.
-*/
-
-export async function askGemini(
-    question
-) {
+export async function askGemini(question) {
 
     const input =
         String(
@@ -639,9 +544,9 @@ export async function askGemini(
     let response;
 
 
-    /*
-        Call Netlify Function.
-    */
+    /* ========================================================
+       CALL NETLIFY FUNCTION
+    ======================================================== */
 
     try {
 
@@ -656,6 +561,9 @@ export async function askGemini(
                     headers: {
 
                         "Content-Type":
+                            "application/json",
+
+                        "Accept":
                             "application/json"
 
                     },
@@ -677,8 +585,8 @@ export async function askGemini(
 
         throw new Error(
 
-            "Could not connect to the " +
-            "CrazeMind Gemini server: " +
+            "Could not connect to the Netlify " +
+            "Gemini function. " +
 
             (
                 error?.message ||
@@ -689,13 +597,110 @@ export async function askGemini(
     }
 
 
-    /*
-        Read response.
-    */
+    /* ========================================================
+       READ RESPONSE
+    ======================================================== */
 
     const raw =
         await response.text();
 
+
+    /*
+       IMPORTANT FIX:
+
+       Previously the code immediately called
+       JSON.parse(raw).
+
+       If Netlify returned HTML such as a 404 page,
+       this caused:
+
+       "CrazeMind server returned invalid JSON."
+
+       Now we detect that situation and provide
+       a useful error.
+    */
+
+    const contentType =
+        response.headers.get(
+            "content-type"
+        ) || "";
+
+
+    /* ========================================================
+       NON-JSON RESPONSE
+    ======================================================== */
+
+    if (
+        !contentType
+            .toLowerCase()
+            .includes(
+                "application/json"
+            )
+    ) {
+
+        const preview =
+            raw
+                .replace(
+                    /\s+/g,
+                    " "
+                )
+                .trim()
+                .slice(
+                    0,
+                    300
+                );
+
+
+        if (
+            response.status ===
+            404
+        ) {
+
+            throw new Error(
+
+                "Netlify Gemini function was not found " +
+                "(HTTP 404).\n\n" +
+
+                "Make sure this file exists:\n" +
+
+                "netlify/functions/gemini.js\n\n" +
+
+                "and that the site is deployed on Netlify."
+
+            );
+        }
+
+
+        if (
+            response.status >=
+            500
+        ) {
+
+            throw new Error(
+
+                `Netlify Gemini function returned ` +
+                `HTTP ${response.status}.\n\n` +
+
+                preview
+
+            );
+        }
+
+
+        throw new Error(
+
+            `Gemini server returned a non-JSON ` +
+            `response (HTTP ${response.status}).\n\n` +
+
+            preview
+
+        );
+    }
+
+
+    /* ========================================================
+       PARSE JSON
+    ======================================================== */
 
     let data;
 
@@ -711,16 +716,23 @@ export async function askGemini(
 
         throw new Error(
 
-            "CrazeMind server returned " +
-            "invalid JSON."
+            "Gemini server returned invalid JSON.\n\n" +
+
+            "Response:\n" +
+
+            raw
+                .slice(
+                    0,
+                    300
+                )
 
         );
     }
 
 
-    /*
-        HTTP error.
-    */
+    /* ========================================================
+       HTTP ERROR
+    ======================================================== */
 
     if (
         !response.ok
@@ -740,17 +752,9 @@ export async function askGemini(
     }
 
 
-    /*
-        Extract answer.
-
-        The Netlify Function returns:
-
-        {
-            answer,
-            model,
-            source
-        }
-    */
+    /* ========================================================
+       ANSWER
+    ======================================================== */
 
     const answer =
         String(
@@ -787,12 +791,10 @@ export async function askGemini(
 
 
 /* ============================================================
-   /SEARCH
+   SEARCH
 ============================================================ */
 
-async function handleSearch(
-    input
-) {
+async function handleSearch(input) {
 
     const query =
         input
@@ -889,12 +891,10 @@ async function handleSearch(
 
 
 /* ============================================================
-   /TRAIN
+   TRAIN
 ============================================================ */
 
-async function handleTrain(
-    input
-) {
+async function handleTrain(input) {
 
     const argument =
         input
@@ -1004,7 +1004,7 @@ async function handleTrain(
 
 
 /* ============================================================
-   /STATS
+   STATS
 ============================================================ */
 
 async function handleStats() {
@@ -1043,7 +1043,7 @@ async function handleStats() {
 
 
 /* ============================================================
-   /CLEAR
+   CLEAR
 ============================================================ */
 
 async function handleClear() {
@@ -1062,7 +1062,6 @@ async function handleClear() {
 
         return (
             "## Memory Cleared\n\n" +
-
             "CrazeMind's local training memory " +
             "has been cleared."
         );
@@ -1076,7 +1075,7 @@ async function handleClear() {
 
 
 /* ============================================================
-   /DOWNLOAD
+   DOWNLOAD
 ============================================================ */
 
 async function handleDownload() {
@@ -1096,7 +1095,7 @@ async function handleDownload() {
 
 
 /* ============================================================
-   /HELP
+   HELP
 ============================================================ */
 
 function handleHelp() {
@@ -1109,30 +1108,28 @@ function handleHelp() {
 
         "## CrazeMind Commands\n\n" +
 
-        "`/search query` — Search the web\n\n" +
+        "`/search query` — Search\n\n" +
 
-        "`/math expression` — Calculate math\n\n" +
+        "`/math 2 + 2` — Calculate\n\n" +
 
-        "`/train 100` — Train on 100 examples\n\n" +
+        "`/train 100` — Train\n\n" +
 
-        "`/train full` — Train on the full dataset\n\n" +
+        "`/train full` — Train full dataset\n\n" +
 
-        "`/stats` — Show training statistics\n\n" +
+        "`/stats` — Training statistics\n\n" +
 
         "`/download` — Export training data\n\n" +
 
         "`/clear` — Clear training memory\n\n" +
 
-        "Normal questions are answered using " +
-        "local knowledge/memory first and Gemini " +
-        "as the fallback."
+        "`/about` — About CrazeMind"
 
     );
 }
 
 
 /* ============================================================
-   /ABOUT
+   ABOUT
 ============================================================ */
 
 function handleAbout() {
@@ -1149,20 +1146,17 @@ function handleAbout() {
         "**CrazeStudio**.\n\n" +
 
         "It combines local memory, local knowledge, " +
-        "math, training, search, and Gemini fallback " +
-        "through a Netlify serverless function."
+        "math, training, search, and Gemini."
 
     );
 }
 
 
 /* ============================================================
-   /MATH
+   MATH COMMAND
 ============================================================ */
 
-function handleMath(
-    input
-) {
+function handleMath(input) {
 
     const expression =
         extractMathExpression(
@@ -1219,12 +1213,10 @@ function handleMath(
 
 
 /* ============================================================
-   /WIKI
+   WIKI
 ============================================================ */
 
-async function handleWiki(
-    input
-) {
+async function handleWiki(input) {
 
     const query =
         input
@@ -1244,10 +1236,6 @@ async function handleWiki(
     }
 
 
-    /*
-        Use search.js if it supports web search.
-    */
-
     lastSource =
         "search";
 
@@ -1264,7 +1252,7 @@ async function handleWiki(
     ) {
 
         return (
-            "No Wikipedia/search results found."
+            "No results found."
         );
     }
 
@@ -1307,7 +1295,7 @@ async function handleWiki(
     } catch {
 
         return (
-            "No Wikipedia results found."
+            "No results found."
         );
     }
 }
@@ -1317,19 +1305,13 @@ async function handleWiki(
    COMMAND HANDLER
 ============================================================ */
 
-async function handleCommand(
-    input
-) {
+async function handleCommand(input) {
 
     const lower =
         normalize(
             input
         );
 
-
-    /* --------------------------------------------------------
-       SEARCH
-    -------------------------------------------------------- */
 
     if (
         lower === "/search" ||
@@ -1344,10 +1326,6 @@ async function handleCommand(
     }
 
 
-    /* --------------------------------------------------------
-       WIKI
-    -------------------------------------------------------- */
-
     if (
         lower === "/wiki" ||
         lower.startsWith(
@@ -1360,10 +1338,6 @@ async function handleCommand(
         );
     }
 
-
-    /* --------------------------------------------------------
-       MATH
-    -------------------------------------------------------- */
 
     if (
         lower === "/math" ||
@@ -1378,10 +1352,6 @@ async function handleCommand(
     }
 
 
-    /* --------------------------------------------------------
-       TRAIN
-    -------------------------------------------------------- */
-
     if (
         lower === "/train" ||
         lower.startsWith(
@@ -1395,10 +1365,6 @@ async function handleCommand(
     }
 
 
-    /* --------------------------------------------------------
-       STATS
-    -------------------------------------------------------- */
-
     if (
         lower === "/stats"
     ) {
@@ -1406,10 +1372,6 @@ async function handleCommand(
         return await handleStats();
     }
 
-
-    /* --------------------------------------------------------
-       CLEAR
-    -------------------------------------------------------- */
 
     if (
         lower === "/clear"
@@ -1419,10 +1381,6 @@ async function handleCommand(
     }
 
 
-    /* --------------------------------------------------------
-       DOWNLOAD
-    -------------------------------------------------------- */
-
     if (
         lower === "/download"
     ) {
@@ -1430,10 +1388,6 @@ async function handleCommand(
         return await handleDownload();
     }
 
-
-    /* --------------------------------------------------------
-       HELP
-    -------------------------------------------------------- */
 
     if (
         lower === "/help"
@@ -1443,10 +1397,6 @@ async function handleCommand(
     }
 
 
-    /* --------------------------------------------------------
-       ABOUT
-    -------------------------------------------------------- */
-
     if (
         lower === "/about"
     ) {
@@ -1454,13 +1404,6 @@ async function handleCommand(
         return handleAbout();
     }
 
-
-    /*
-        Unknown slash command.
-
-        Do not silently send an unknown command
-        to Gemini.
-    */
 
     if (
         input.startsWith("/")
@@ -1499,10 +1442,6 @@ export async function answerQuestion(
         ).trim();
 
 
-    /*
-        Reset source.
-    */
-
     lastSource =
         "local";
 
@@ -1523,7 +1462,7 @@ export async function answerQuestion(
 
 
     /* ========================================================
-       1. COMMANDS
+       COMMANDS
     ======================================================== */
 
     if (
@@ -1588,7 +1527,7 @@ export async function answerQuestion(
 
 
     /* ========================================================
-       2. LOCAL MEMORY
+       LOCAL MEMORY
     ======================================================== */
 
     try {
@@ -1610,11 +1549,6 @@ export async function answerQuestion(
                 "local-memory";
 
 
-            console.log(
-                "[CrazeMind] LOCAL MEMORY"
-            );
-
-
             return makeAnswer(
                 remembered,
                 "local-memory"
@@ -1626,14 +1560,14 @@ export async function answerQuestion(
     ) {
 
         console.warn(
-            "[CrazeMind] Local memory error:",
+            "[CrazeMind] Memory error:",
             error
         );
     }
 
 
     /* ========================================================
-       3. LOCAL MATH
+       LOCAL MATH
     ======================================================== */
 
     if (
@@ -1662,15 +1596,9 @@ export async function answerQuestion(
                 "local-math";
 
 
-            console.log(
-                "[CrazeMind] LOCAL MATH"
-            );
-
-
             return makeAnswer(
 
                 "## Answer\n\n" +
-
                 `**${result}**`,
 
                 "local-math"
@@ -1680,7 +1608,7 @@ export async function answerQuestion(
 
 
     /* ========================================================
-       4. LOCAL KNOWLEDGE
+       LOCAL KNOWLEDGE
     ======================================================== */
 
     const localAnswer =
@@ -1697,15 +1625,6 @@ export async function answerQuestion(
             "local-knowledge";
 
 
-        console.log(
-            "[CrazeMind] LOCAL KNOWLEDGE"
-        );
-
-
-        /*
-            Save local answer to memory.
-        */
-
         try {
 
             await learn(
@@ -1718,7 +1637,7 @@ export async function answerQuestion(
         ) {
 
             console.warn(
-                "[CrazeMind] Could not save local answer:",
+                "[CrazeMind] Memory save failed:",
                 error
             );
         }
@@ -1732,13 +1651,13 @@ export async function answerQuestion(
 
 
     /* ========================================================
-       5. GEMINI FALLBACK
+       GEMINI FALLBACK
     ======================================================== */
 
     try {
 
         console.log(
-            "[CrazeMind] GEMINI FALLBACK"
+            "[CrazeMind] Using Gemini fallback..."
         );
 
 
@@ -1749,12 +1668,14 @@ export async function answerQuestion(
 
 
         const answer =
-            result?.answer ||
-            "";
+            String(
+                result?.answer ||
+                ""
+            ).trim();
 
 
         if (
-            !answer.trim()
+            !answer
         ) {
 
             throw new Error(
@@ -1768,11 +1689,7 @@ export async function answerQuestion(
 
 
         /*
-            Save Gemini answer to local memory.
-
-            This means the next time a similar
-            question is asked, CrazeMind may answer
-            from local memory instead of calling Gemini.
+           Save Gemini answer locally.
         */
 
         try {
@@ -1787,7 +1704,7 @@ export async function answerQuestion(
         ) {
 
             console.warn(
-                "[CrazeMind] Could not save Gemini answer:",
+                "[CrazeMind] Gemini memory save failed:",
                 error
             );
         }
@@ -1819,19 +1736,17 @@ export async function answerQuestion(
             "CrazeMind couldn't answer this locally, " +
             "and the Gemini fallback failed.\n\n" +
 
-            "**Reason:** `" +
+            "**Reason:**\n\n" +
+
+            "```text\n" +
 
             String(
                 error?.message ||
                 error ||
-                "Unknown Gemini error"
-            )
-                .replace(
-                    /`/g,
-                    "'"
-                ) +
+                "Unknown error"
+            ) +
 
-            "`",
+            "\n```",
 
             "error"
         );
