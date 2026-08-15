@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -16,11 +17,13 @@
 
     <title>CrazeMind</title>
 
+
     <!-- Markdown -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-    <!-- Sanitize rendered Markdown -->
+    <!-- Security -->
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+
 
     <style>
 
@@ -28,15 +31,20 @@
             box-sizing: border-box;
         }
 
+
         html,
         body {
             margin: 0;
+
             width: 100%;
             height: 100%;
+
             overflow: hidden;
         }
 
+
         body {
+
             font-family:
                 Inter,
                 system-ui,
@@ -46,8 +54,10 @@
                 sans-serif;
 
             background: #0b0f14;
+
             color: #f4f7fb;
         }
+
 
         button,
         input,
@@ -55,27 +65,31 @@
             font: inherit;
         }
 
+
         button {
             cursor: pointer;
         }
 
 
-        /* ==============================
+        /* =================================
            APP
-        ============================== */
+        ================================= */
 
         .app {
+
             width: 100%;
             height: 100%;
+
             display: flex;
         }
 
 
-        /* ==============================
+        /* =================================
            SIDEBAR
-        ============================== */
+        ================================= */
 
         .sidebar {
+
             width: 280px;
             height: 100%;
 
@@ -84,44 +98,61 @@
 
             background: #0f141b;
 
-            border-right: 1px solid #202731;
+            border-right:
+                1px solid #202731;
 
-            transition: transform 0.25s ease;
+            transition:
+                transform .25s ease;
         }
 
+
         .sidebar-header {
+
             padding: 16px;
         }
 
+
         .brand {
+
             display: flex;
+
             align-items: center;
+
             gap: 10px;
 
             margin-bottom: 16px;
         }
 
+
         .logo {
+
             width: 38px;
             height: 38px;
 
             display: grid;
+
             place-items: center;
 
             border-radius: 11px;
 
             background: #2563eb;
 
-            font-weight: 800;
             font-size: 18px;
+
+            font-weight: 800;
         }
 
+
         .brand-name {
+
             font-weight: 700;
+
             font-size: 16px;
         }
 
+
         .brand-sub {
+
             margin-top: 2px;
 
             color: #6f7a89;
@@ -129,102 +160,134 @@
             font-size: 11px;
         }
 
+
         .new-chat {
+
             width: 100%;
 
             padding: 11px;
 
-            border: 1px solid #293240;
+            border:
+                1px solid #293240;
+
             border-radius: 10px;
 
             background: #161d26;
+
             color: #e8edf4;
         }
 
+
         .new-chat:hover {
+
             background: #1c2530;
         }
 
 
-        /* ==============================
-           SEARCH
-        ============================== */
+        /* =================================
+           SEARCH CHATS
+        ================================= */
 
         .history-search {
-            margin: 0 16px 12px;
+
+            margin:
+                0 16px 12px;
         }
 
+
         .history-search input {
+
             width: 100%;
 
-            padding: 10px 11px;
+            padding:
+                10px 11px;
 
-            border: 1px solid #293240;
+            border:
+                1px solid #293240;
+
             border-radius: 9px;
 
             outline: none;
 
             background: #0b1016;
+
             color: white;
         }
 
+
         .history-search input:focus {
+
             border-color: #2563eb;
         }
 
 
-        /* ==============================
+        /* =================================
            HISTORY
-        ============================== */
+        ================================= */
 
         .history {
+
             flex: 1;
 
             overflow-y: auto;
 
-            padding: 0 10px;
+            padding:
+                0 10px;
         }
 
+
         .history-title {
-            padding: 8px 7px;
+
+            padding:
+                8px 7px;
 
             color: #687483;
 
             font-size: 11px;
+
             text-transform: uppercase;
         }
 
+
         .history-item {
+
             width: 100%;
 
             display: flex;
-            align-items: center;
 
-            gap: 8px;
-
-            padding: 10px 9px;
+            padding:
+                10px 9px;
 
             margin-bottom: 3px;
 
             border: 0;
+
             border-radius: 9px;
 
-            text-align: left;
-
             background: transparent;
+
             color: #bfc7d2;
+
+            text-align: left;
         }
 
+
         .history-item:hover {
+
             background: #171e27;
         }
 
+
         .history-item.active {
+
             background: #1c2632;
+
             color: white;
         }
 
+
         .history-name {
+
             overflow: hidden;
 
             white-space: nowrap;
@@ -233,17 +296,21 @@
         }
 
 
-        /* ==============================
+        /* =================================
            SIDEBAR FOOTER
-        ============================== */
+        ================================= */
 
         .sidebar-footer {
+
             padding: 12px;
 
-            border-top: 1px solid #202731;
+            border-top:
+                1px solid #202731;
         }
 
+
         .footer-button {
+
             width: 100%;
 
             padding: 9px;
@@ -251,25 +318,31 @@
             margin-top: 5px;
 
             border: 0;
+
             border-radius: 8px;
 
             background: transparent;
+
             color: #8994a3;
 
             text-align: left;
         }
 
+
         .footer-button:hover {
+
             background: #171e27;
+
             color: white;
         }
 
 
-        /* ==============================
+        /* =================================
            MAIN
-        ============================== */
+        ================================= */
 
         .main {
+
             min-width: 0;
 
             flex: 1;
@@ -277,50 +350,64 @@
             height: 100%;
 
             display: flex;
+
             flex-direction: column;
 
             background: #0b0f14;
         }
 
 
-        /* ==============================
-           TOPBAR
-        ============================== */
+        /* =================================
+           TOP BAR
+        ================================= */
 
         .topbar {
+
             height: 60px;
 
             display: flex;
+
             align-items: center;
 
             gap: 12px;
 
-            padding: 0 18px;
+            padding:
+                0 18px;
 
-            border-bottom: 1px solid #202731;
+            border-bottom:
+                1px solid #202731;
         }
 
+
         .menu-button {
+
             display: none;
 
             width: 36px;
             height: 36px;
 
             border: 0;
+
             border-radius: 8px;
 
             background: transparent;
+
             color: white;
 
             font-size: 20px;
         }
 
+
         .menu-button:hover {
+
             background: #171e27;
         }
 
+
         .chat-title {
+
             font-size: 15px;
+
             font-weight: 600;
 
             overflow: hidden;
@@ -330,8 +417,16 @@
             text-overflow: ellipsis;
         }
 
+
         .status {
+
             margin-left: auto;
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 6px;
 
             color: #6f7b89;
 
@@ -339,11 +434,48 @@
         }
 
 
-        /* ==============================
+        .status-dot {
+
+            width: 7px;
+            height: 7px;
+
+            border-radius: 50%;
+
+            background: #22c55e;
+        }
+
+
+        .status.busy .status-dot {
+
+            background: #f59e0b;
+
+            animation:
+                pulse 1s infinite;
+        }
+
+
+        @keyframes pulse {
+
+            0% {
+                opacity: .3;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: .3;
+            }
+        }
+
+
+        /* =================================
            CHAT
-        ============================== */
+        ================================= */
 
         .chat {
+
             flex: 1;
 
             width: 100%;
@@ -352,33 +484,40 @@
 
             margin: 0 auto;
 
-            padding: 25px 20px;
+            padding:
+                25px 20px;
 
             overflow-y: auto;
         }
 
 
-        /* ==============================
+        /* =================================
            WELCOME
-        ============================== */
+        ================================= */
 
         .welcome {
+
             min-height: 70%;
 
             display: flex;
+
             flex-direction: column;
 
             align-items: center;
+
             justify-content: center;
 
             text-align: center;
         }
 
+
         .welcome-logo {
+
             width: 58px;
             height: 58px;
 
             display: grid;
+
             place-items: center;
 
             border-radius: 17px;
@@ -386,22 +525,30 @@
             background: #2563eb;
 
             font-size: 24px;
+
             font-weight: 800;
         }
 
+
         .welcome h1 {
-            margin: 18px 0 6px;
+
+            margin:
+                18px 0 6px;
 
             font-size: 28px;
         }
 
+
         .welcome p {
+
             margin: 0;
 
             color: #727e8d;
         }
 
+
         .examples {
+
             display: flex;
 
             flex-wrap: wrap;
@@ -413,43 +560,59 @@
             margin-top: 22px;
         }
 
-        .example {
-            padding: 9px 12px;
 
-            border: 1px solid #293240;
+        .example {
+
+            padding:
+                9px 12px;
+
+            border:
+                1px solid #293240;
+
             border-radius: 9px;
 
             background: #121820;
+
             color: #bfc8d4;
         }
 
+
         .example:hover {
+
             background: #1a222c;
         }
 
 
-        /* ==============================
+        /* =================================
            MESSAGES
-        ============================== */
+        ================================= */
 
         .message-row {
+
             display: flex;
 
             margin-bottom: 22px;
         }
 
+
         .message-row.user {
+
             justify-content: flex-end;
         }
 
+
         .message-row.ai {
+
             justify-content: flex-start;
         }
 
+
         .message {
+
             max-width: 80%;
 
-            padding: 13px 15px;
+            padding:
+                13px 15px;
 
             border-radius: 15px;
 
@@ -458,75 +621,179 @@
             overflow-wrap: anywhere;
         }
 
+
         .message.user {
+
             background: #2563eb;
 
             white-space: pre-wrap;
         }
 
+
         .message.ai {
+
             background: #171d25;
 
-            border: 1px solid #252d38;
+            border:
+                1px solid #252d38;
         }
 
 
-        /* ==============================
+        /* =================================
+           THINKING / ACTIVITY
+        ================================= */
+
+        .activity-row {
+
+            display: flex;
+
+            justify-content: flex-start;
+
+            margin-bottom: 18px;
+        }
+
+
+        .activity {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            gap: 10px;
+
+            padding:
+                10px 13px;
+
+            border:
+                1px solid #252d38;
+
+            border-radius: 12px;
+
+            background: #131920;
+
+            color: #8995a5;
+
+            font-size: 12px;
+        }
+
+
+        .activity-spinner {
+
+            width: 15px;
+            height: 15px;
+
+            border:
+                2px solid #303946;
+
+            border-top-color:
+                #3b82f6;
+
+            border-radius: 50%;
+
+            animation:
+                spin .8s linear infinite;
+        }
+
+
+        @keyframes spin {
+
+            to {
+                transform:
+                    rotate(360deg);
+            }
+        }
+
+
+        .activity-icon {
+
+            font-size: 14px;
+        }
+
+
+        .activity-text {
+
+            min-width: 100px;
+        }
+
+
+        /* =================================
            MARKDOWN
-        ============================== */
+        ================================= */
 
         .markdown {
+
             line-height: 1.65;
 
             word-wrap: break-word;
         }
 
+
         .markdown > :first-child {
+
             margin-top: 0;
         }
 
+
         .markdown > :last-child {
+
             margin-bottom: 0;
         }
+
 
         .markdown h1,
         .markdown h2,
         .markdown h3,
         .markdown h4 {
+
             line-height: 1.3;
 
             margin-top: 18px;
+
             margin-bottom: 9px;
         }
 
+
         .markdown h1 {
+
             font-size: 24px;
         }
 
+
         .markdown h2 {
+
             font-size: 20px;
         }
 
+
         .markdown h3 {
+
             font-size: 17px;
         }
 
+
         .markdown p {
+
             margin: 9px 0;
         }
 
+
         .markdown ul,
         .markdown ol {
+
             padding-left: 25px;
 
             margin: 9px 0;
         }
 
+
         .markdown li {
+
             margin: 4px 0;
         }
 
+
         .markdown blockquote {
+
             margin: 12px 0;
 
             padding:
@@ -538,8 +805,11 @@
             color: #aab4c2;
         }
 
+
         .markdown code {
-            padding: 2px 5px;
+
+            padding:
+                2px 5px;
 
             border-radius: 5px;
 
@@ -547,15 +817,12 @@
 
             color: #d9e2ef;
 
-            font-family:
-                "SFMono-Regular",
-                Consolas,
-                monospace;
-
-            font-size: 0.9em;
+            font-family: monospace;
         }
 
+
         .markdown pre {
+
             overflow-x: auto;
 
             margin: 12px 0;
@@ -567,38 +834,35 @@
             background: #080c11;
         }
 
+
         .markdown pre code {
+
             padding: 0;
 
             background: transparent;
-
-            color: #dce5ef;
 
             font-size: 13px;
 
             white-space: pre;
         }
 
+
         .markdown a {
+
             color: #60a5fa;
 
             text-decoration: none;
         }
 
+
         .markdown a:hover {
+
             text-decoration: underline;
         }
 
-        .markdown hr {
-            border: 0;
-
-            border-top:
-                1px solid #303946;
-
-            margin: 17px 0;
-        }
 
         .markdown table {
+
             display: block;
 
             max-width: 100%;
@@ -606,13 +870,14 @@
             overflow-x: auto;
 
             border-collapse: collapse;
-
-            margin: 12px 0;
         }
+
 
         .markdown th,
         .markdown td {
-            padding: 8px 10px;
+
+            padding:
+                8px 10px;
 
             border:
                 1px solid #303946;
@@ -620,22 +885,19 @@
             text-align: left;
         }
 
+
         .markdown th {
+
             background: #202832;
         }
 
-        .markdown img {
-            max-width: 100%;
 
-            border-radius: 8px;
-        }
-
-
-        /* ==============================
+        /* =================================
            MESSAGE ACTIONS
-        ============================== */
+        ================================= */
 
         .message-actions {
+
             display: flex;
 
             gap: 5px;
@@ -643,25 +905,34 @@
             margin-top: 10px;
         }
 
+
         .message-action {
-            padding: 4px 7px;
+
+            padding:
+                4px 7px;
 
             border: 0;
+
             border-radius: 6px;
 
             background: #222a34;
+
             color: #8e99a8;
 
             font-size: 11px;
         }
 
+
         .message-action:hover {
+
             color: white;
 
             background: #2b3542;
         }
 
+
         .sources {
+
             margin-top: 8px;
 
             color: #707c8b;
@@ -670,21 +941,25 @@
         }
 
 
-        /* ==============================
+        /* =================================
            COMPOSER
-        ============================== */
+        ================================= */
 
         .composer {
+
             width: 100%;
 
             max-width: 900px;
 
             margin: 0 auto;
 
-            padding: 10px 20px 16px;
+            padding:
+                10px 20px 16px;
         }
 
+
         .input-box {
+
             display: flex;
 
             align-items: flex-end;
@@ -701,10 +976,13 @@
             background: #11171f;
         }
 
+
         #message {
+
             flex: 1;
 
             min-height: 40px;
+
             max-height: 150px;
 
             resize: none;
@@ -712,6 +990,7 @@
             padding: 9px;
 
             border: 0;
+
             outline: 0;
 
             background: transparent;
@@ -719,31 +998,42 @@
             color: white;
         }
 
+
         #message::placeholder {
+
             color: #697583;
         }
 
+
         #send {
+
             width: 40px;
             height: 40px;
 
             border: 0;
+
             border-radius: 11px;
 
             background: #2563eb;
+
             color: white;
 
             font-size: 20px;
+
             font-weight: bold;
         }
 
+
         #send:disabled {
-            opacity: 0.35;
+
+            opacity: .35;
 
             cursor: not-allowed;
         }
 
+
         .hint {
+
             padding-top: 6px;
 
             text-align: center;
@@ -754,29 +1044,35 @@
         }
 
 
-        /* ==============================
+        /* =================================
            MOBILE
-        ============================== */
+        ================================= */
 
         .overlay {
+
             display: none;
 
             position: fixed;
 
             inset: 0;
 
-            background: rgba(0, 0, 0, 0.5);
+            background:
+                rgba(0, 0, 0, .5);
 
             z-index: 5;
         }
 
+
         @media (max-width: 700px) {
 
             .sidebar {
+
                 position: fixed;
 
                 left: 0;
+
                 top: 0;
+
                 bottom: 0;
 
                 z-index: 10;
@@ -785,47 +1081,67 @@
                     translateX(-100%);
             }
 
+
             .sidebar.open {
+
                 transform:
                     translateX(0);
             }
 
+
             .overlay.show {
+
                 display: block;
             }
+
 
             .menu-button {
+
                 display: block;
             }
 
+
             .status {
+
                 display: none;
             }
 
+
             .chat {
-                padding: 18px 12px;
+
+                padding:
+                    18px 12px;
             }
+
 
             .composer {
-                padding: 8px 12px 12px;
+
+                padding:
+                    8px 12px 12px;
             }
 
+
             .message {
+
                 max-width: 90%;
             }
 
         }
 
     </style>
+
 </head>
 
 
 <body>
 
+
 <div class="app">
 
 
-    <!-- SIDEBAR -->
+    <!-- =================================
+         SIDEBAR
+    ================================= -->
 
     <aside
         id="sidebar"
@@ -891,6 +1207,7 @@
                 ↓ Export chats
             </button>
 
+
             <button
                 id="clearAll"
                 class="footer-button"
@@ -909,7 +1226,9 @@
     ></div>
 
 
-    <!-- MAIN -->
+    <!-- =================================
+         MAIN
+    ================================= -->
 
     <main class="main">
 
@@ -936,7 +1255,18 @@
                 id="status"
                 class="status"
             >
-                Ready
+
+                <span
+                    id="statusDot"
+                    class="status-dot"
+                ></span>
+
+                <span
+                    id="statusText"
+                >
+                    Ready
+                </span>
+
             </div>
 
         </header>
@@ -971,11 +1301,14 @@
 
 
             <div class="hint">
+
                 CrazeMind can make mistakes.
                 Check important information.
+
             </div>
 
         </footer>
+
 
     </main>
 
@@ -984,17 +1317,22 @@
 
 <script type="module">
 
+
+/* =============================================
+   IMPORT BRAIN
+============================================= */
+
 import {
     answerQuestion
 } from "../Backend/brain.js";
 
 
-/* =========================================================
+/* =============================================
    STORAGE
-========================================================= */
+============================================= */
 
 const STORAGE_KEY =
-    "crazemind_chats_v1";
+    "crazemind_chats_v2";
 
 
 let chats =
@@ -1005,49 +1343,57 @@ let currentChatId =
     null;
 
 
-/* =========================================================
+/* =============================================
    ELEMENTS
-========================================================= */
+============================================= */
 
 const sidebar =
     document.getElementById(
         "sidebar"
     );
 
+
 const overlay =
     document.getElementById(
         "overlay"
     );
+
 
 const history =
     document.getElementById(
         "history"
     );
 
+
 const historySearch =
     document.getElementById(
         "historySearch"
     );
+
 
 const chat =
     document.getElementById(
         "chat"
     );
 
+
 const messageInput =
     document.getElementById(
         "message"
     );
+
 
 const sendButton =
     document.getElementById(
         "send"
     );
 
+
 const chatTitle =
     document.getElementById(
         "chatTitle"
     );
+
 
 const status =
     document.getElementById(
@@ -1055,9 +1401,15 @@ const status =
     );
 
 
-/* =========================================================
+const statusText =
+    document.getElementById(
+        "statusText"
+    );
+
+
+/* =============================================
    STORAGE
-========================================================= */
+============================================= */
 
 function loadChats() {
 
@@ -1070,24 +1422,22 @@ function loadChats() {
 
 
         if (!saved) {
+
             return [];
         }
 
 
         const parsed =
-            JSON.parse(saved);
+            JSON.parse(
+                saved
+            );
 
 
         return Array.isArray(parsed)
             ? parsed
             : [];
 
-    } catch (error) {
-
-        console.error(
-            "Could not load chats:",
-            error
-        );
+    } catch {
 
         return [];
     }
@@ -1096,46 +1446,319 @@ function loadChats() {
 
 function saveChats() {
 
-    try {
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(
+            chats
+        )
+    );
+}
 
-        localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify(chats)
+
+/* =============================================
+   STATUS
+============================================= */
+
+function setStatus(
+    text,
+    busy = false
+) {
+
+    statusText.textContent =
+        text;
+
+
+    if (busy) {
+
+        status.classList.add(
+            "busy"
         );
 
-    } catch (error) {
+    } else {
 
-        console.error(
-            "Could not save chats:",
-            error
-        );
-
-        alert(
-            "Chat storage is full. " +
-            "Export or delete old chats."
+        status.classList.remove(
+            "busy"
         );
     }
 }
 
 
-/* =========================================================
-   SCROLL
-========================================================= */
+/* =============================================
+   ACTIVITY
+============================================= */
 
-function scrollBottom() {
+function getActivity(
+    question
+) {
 
-    requestAnimationFrame(() => {
+    const q =
+        question
+            .trim()
+            .toLowerCase();
 
-        chat.scrollTop =
-            chat.scrollHeight;
 
-    });
+    if (
+        q.startsWith(
+            "/search"
+        )
+    ) {
+
+        return {
+
+            icon: "🔎",
+
+            text:
+                "Searching the web…"
+        };
+    }
+
+
+    if (
+        q.startsWith(
+            "/wiki"
+        )
+    ) {
+
+        return {
+
+            icon: "📚",
+
+            text:
+                "Reading Wikipedia…"
+        };
+    }
+
+
+    if (
+        q.startsWith(
+            "/math"
+        )
+    ) {
+
+        return {
+
+            icon: "🧮",
+
+            text:
+                "Calculating…"
+        };
+    }
+
+
+    if (
+        q.startsWith(
+            "/train"
+        )
+    ) {
+
+        return {
+
+            icon: "🏋️",
+
+            text:
+                "Training CrazeMind…"
+        };
+    }
+
+
+    if (
+        q.startsWith(
+            "/help"
+        ) ||
+        q.startsWith(
+            "/about"
+        )
+    ) {
+
+        return {
+
+            icon: "⚙️",
+
+            text:
+                "Processing command…"
+        };
+    }
+
+
+    if (
+        q.startsWith(
+            "/ask"
+        )
+    ) {
+
+        return {
+
+            icon: "🧠",
+
+            text:
+                "Thinking…"
+        };
+    }
+
+
+    return {
+
+        icon: "🧠",
+
+        text:
+            "Thinking…"
+    };
 }
 
 
-/* =========================================================
+/* =============================================
+   SHOW ACTIVITY
+============================================= */
+
+function showActivity(
+    question
+) {
+
+    removeActivity();
+
+
+    const activity =
+        getActivity(
+            question
+        );
+
+
+    const row =
+        document.createElement(
+            "div"
+        );
+
+
+    row.id =
+        "activityRow";
+
+
+    row.className =
+        "activity-row";
+
+
+    const box =
+        document.createElement(
+            "div"
+        );
+
+
+    box.className =
+        "activity";
+
+
+    const spinner =
+        document.createElement(
+            "div"
+        );
+
+
+    spinner.className =
+        "activity-spinner";
+
+
+    const icon =
+        document.createElement(
+            "span"
+        );
+
+
+    icon.className =
+        "activity-icon";
+
+
+    icon.textContent =
+        activity.icon;
+
+
+    const text =
+        document.createElement(
+            "span"
+        );
+
+
+    text.className =
+        "activity-text";
+
+
+    text.textContent =
+        activity.text;
+
+
+    box.appendChild(
+        spinner
+    );
+
+
+    box.appendChild(
+        icon
+    );
+
+
+    box.appendChild(
+        text
+    );
+
+
+    row.appendChild(
+        box
+    );
+
+
+    chat.appendChild(
+        row
+    );
+
+
+    scrollBottom();
+
+
+    setStatus(
+        activity.text,
+        true
+    );
+}
+
+
+/* =============================================
+   REMOVE ACTIVITY
+============================================= */
+
+function removeActivity() {
+
+    const old =
+        document.getElementById(
+            "activityRow"
+        );
+
+
+    if (old) {
+
+        old.remove();
+    }
+}
+
+
+/* =============================================
+   SCROLL
+============================================= */
+
+function scrollBottom() {
+
+    requestAnimationFrame(
+        () => {
+
+            chat.scrollTop =
+                chat.scrollHeight;
+
+        }
+    );
+}
+
+
+/* =============================================
    CREATE CHAT
-========================================================= */
+============================================= */
 
 function createChat() {
 
@@ -1168,6 +1791,7 @@ function createChat() {
 
     saveChats();
 
+
     renderHistory();
 
     renderChat();
@@ -1176,9 +1800,9 @@ function createChat() {
 }
 
 
-/* =========================================================
-   CURRENT CHAT
-========================================================= */
+/* =============================================
+   GET CURRENT CHAT
+============================================= */
 
 function getCurrentChat() {
 
@@ -1190,15 +1814,20 @@ function getCurrentChat() {
 }
 
 
-/* =========================================================
+/* =============================================
    TITLE
-========================================================= */
+============================================= */
 
-function generateTitle(text) {
+function generateTitle(
+    text
+) {
 
     let title =
         text
-            .replace(/\s+/g, " ")
+            .replace(
+                /\s+/g,
+                " "
+            )
             .trim();
 
 
@@ -1210,11 +1839,14 @@ function generateTitle(text) {
 
 
     if (!title) {
+
         return "New chat";
     }
 
 
-    if (title.length > 35) {
+    if (
+        title.length > 35
+    ) {
 
         title =
             title.slice(
@@ -1229,9 +1861,9 @@ function generateTitle(text) {
 }
 
 
-/* =========================================================
+/* =============================================
    HISTORY
-========================================================= */
+============================================= */
 
 function renderHistory() {
 
@@ -1285,11 +1917,14 @@ function renderHistory() {
         empty.style.padding =
             "15px 8px";
 
+
         empty.style.color =
             "#687483";
 
+
         empty.style.fontSize =
             "12px";
+
 
         empty.textContent =
             "No chats found.";
@@ -1353,6 +1988,7 @@ function renderHistory() {
                     currentChatId =
                         item.id;
 
+
                     renderHistory();
 
                     renderChat();
@@ -1369,11 +2005,14 @@ function renderHistory() {
 }
 
 
-/* =========================================================
+/* =============================================
    RENDER CHAT
-========================================================= */
+============================================= */
 
 function renderChat() {
+
+    removeActivity();
+
 
     chat.innerHTML =
         "";
@@ -1399,6 +2038,7 @@ function renderChat() {
 
 
         welcome.innerHTML = `
+
             <div class="welcome-logo">
                 C
             </div>
@@ -1417,28 +2057,39 @@ function renderChat() {
                     class="example"
                     data-question="What is artificial intelligence?"
                 >
-                    Explain AI
+                    🧠 Explain AI
                 </button>
+
 
                 <button
                     class="example"
                     data-question="/search Albert Einstein"
                 >
-                    Search
+                    🔎 Search
                 </button>
+
+
+                <button
+                    class="example"
+                    data-question="/wiki Minecraft"
+                >
+                    📚 Wikipedia
+                </button>
+
 
                 <button
                     class="example"
                     data-question="/math 2^100"
                 >
-                    Solve math
+                    🧮 Solve math
                 </button>
+
 
                 <button
                     class="example"
                     data-question="/help"
                 >
-                    Commands
+                    ⚙️ Commands
                 </button>
 
             </div>
@@ -1462,6 +2113,7 @@ function renderChat() {
 
                             messageInput.value =
                                 button.dataset.question;
+
 
                             messageInput.focus();
                         };
@@ -1495,9 +2147,9 @@ function renderChat() {
 }
 
 
-/* =========================================================
-   RENDER MESSAGE WITH MARKDOWN
-========================================================= */
+/* =============================================
+   RENDER MESSAGE
+============================================= */
 
 function renderMessage(
     message
@@ -1547,11 +2199,6 @@ function renderMessage(
             "markdown";
 
 
-        /*
-            Markdown → HTML
-            Then sanitize it.
-        */
-
         const rawHTML =
             marked.parse(
                 message.text || "",
@@ -1569,11 +2216,6 @@ function renderMessage(
 
     } else {
 
-        /*
-            User messages remain
-            plain text.
-        */
-
         text.textContent =
             message.text;
     }
@@ -1583,10 +2225,6 @@ function renderMessage(
         text
     );
 
-
-    /* =========================
-       Sources
-    ========================= */
 
     if (
         message.sources &&
@@ -1615,10 +2253,6 @@ function renderMessage(
         );
     }
 
-
-    /* =========================
-       Actions
-    ========================= */
 
     if (
         message.role === "ai"
@@ -1704,9 +2338,9 @@ function renderMessage(
 }
 
 
-/* =========================================================
+/* =============================================
    SEND MESSAGE
-========================================================= */
+============================================= */
 
 async function sendMessage() {
 
@@ -1716,6 +2350,7 @@ async function sendMessage() {
 
 
     if (!question) {
+
         return;
     }
 
@@ -1731,11 +2366,14 @@ async function sendMessage() {
 
 
     if (!current) {
+
         return;
     }
 
 
-    /* USER MESSAGE */
+    /* ------------------------------
+       USER MESSAGE
+    ------------------------------ */
 
     current.messages.push({
 
@@ -1771,17 +2409,24 @@ async function sendMessage() {
 
     saveChats();
 
+
     renderHistory();
 
     renderChat();
 
 
-    status.textContent =
-        "Thinking...";
+    /* ------------------------------
+       SHOW REAL ACTIVITY
+    ------------------------------ */
+
+    showActivity(
+        question
+    );
 
 
     sendButton.disabled =
         true;
+
 
     messageInput.disabled =
         true;
@@ -1794,6 +2439,15 @@ async function sendMessage() {
                 question
             );
 
+
+        /* Remove "Thinking..." */
+
+        removeActivity();
+
+
+        /* --------------------------
+           AI MESSAGE
+        -------------------------- */
 
         current.messages.push({
 
@@ -1819,11 +2473,38 @@ async function sendMessage() {
 
         saveChats();
 
+
         renderChat();
 
 
-        status.textContent =
-            "Ready";
+        setStatus(
+            "Complete",
+            false
+        );
+
+
+        /*
+           Return to Ready after
+           a short moment.
+        */
+
+        setTimeout(
+            () => {
+
+                if (
+                    !sendButton.disabled
+                ) {
+
+                    setStatus(
+                        "Ready",
+                        false
+                    );
+                }
+
+            },
+            1200
+        );
+
 
     } catch (error) {
 
@@ -1833,14 +2514,19 @@ async function sendMessage() {
         );
 
 
+        removeActivity();
+
+
         current.messages.push({
 
             role:
                 "ai",
 
             text:
-                "Error: " +
-                error.message,
+                "## Error\n\n" +
+                "`" +
+                error.message +
+                "`",
 
             sources: [],
 
@@ -1851,16 +2537,20 @@ async function sendMessage() {
 
         saveChats();
 
+
         renderChat();
 
 
-        status.textContent =
-            "Error";
+        setStatus(
+            "Error",
+            false
+        );
     }
 
 
     sendButton.disabled =
         false;
+
 
     messageInput.disabled =
         false;
@@ -1868,25 +2558,28 @@ async function sendMessage() {
 
     messageInput.focus();
 
+
     scrollBottom();
 }
 
 
-/* =========================================================
+/* =============================================
    NEW CHAT
-========================================================= */
+============================================= */
 
 document
-    .getElementById("newChat")
+    .getElementById(
+        "newChat"
+    )
     .addEventListener(
         "click",
         createChat
     );
 
 
-/* =========================================================
-   SEARCH CHATS
-========================================================= */
+/* =============================================
+   SEARCH HISTORY
+============================================= */
 
 historySearch.addEventListener(
     "input",
@@ -1894,9 +2587,9 @@ historySearch.addEventListener(
 );
 
 
-/* =========================================================
+/* =============================================
    SEND BUTTON
-========================================================= */
+============================================= */
 
 sendButton.addEventListener(
     "click",
@@ -1904,9 +2597,9 @@ sendButton.addEventListener(
 );
 
 
-/* =========================================================
+/* =============================================
    ENTER
-========================================================= */
+============================================= */
 
 messageInput.addEventListener(
     "keydown",
@@ -1925,12 +2618,14 @@ messageInput.addEventListener(
 );
 
 
-/* =========================================================
+/* =============================================
    CLEAR ALL
-========================================================= */
+============================================= */
 
 document
-    .getElementById("clearAll")
+    .getElementById(
+        "clearAll"
+    )
     .addEventListener(
         "click",
         () => {
@@ -1947,6 +2642,7 @@ document
 
             chats = [];
 
+
             currentChatId =
                 null;
 
@@ -1959,12 +2655,14 @@ document
     );
 
 
-/* =========================================================
+/* =============================================
    EXPORT
-========================================================= */
+============================================= */
 
 document
-    .getElementById("exportAll")
+    .getElementById(
+        "exportAll"
+    )
     .addEventListener(
         "click",
         () => {
@@ -2032,12 +2730,14 @@ document
     );
 
 
-/* =========================================================
+/* =============================================
    MOBILE MENU
-========================================================= */
+============================================= */
 
 document
-    .getElementById("menuButton")
+    .getElementById(
+        "menuButton"
+    )
     .addEventListener(
         "click",
         () => {
@@ -2045,6 +2745,7 @@ document
             sidebar.classList.add(
                 "open"
             );
+
 
             overlay.classList.add(
                 "show"
@@ -2059,6 +2760,7 @@ function closeSidebar() {
         "open"
     );
 
+
     overlay.classList.remove(
         "show"
     );
@@ -2071,11 +2773,13 @@ overlay.addEventListener(
 );
 
 
-/* =========================================================
+/* =============================================
    START
-========================================================= */
+============================================= */
 
-if (chats.length > 0) {
+if (
+    chats.length > 0
+) {
 
     currentChatId =
         chats[0].id;
@@ -2095,4 +2799,5 @@ messageInput.focus();
 </script>
 
 </body>
+
 </html>
