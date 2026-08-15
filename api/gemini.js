@@ -3,117 +3,255 @@
 CrazeMind Gemini API
 CrazeStudio
 ============================================================
+
+Netlify Function
+
+Expected environment variable:
+
+GEMINI_API_KEY
+
+Frontend endpoint:
+
+/.netlify/functions/gemini
+
+Request:
+
+POST
+{
+    "question": "Hello"
+}
+
+Response:
+
+{
+    "answer": "...",
+    "model": "gemini-3.6-flash",
+    "source": "Gemini"
+}
+============================================================
 */
+
+
+/* ============================================================
+   CONFIGURATION
+============================================================ */
 
 const MODEL =
     "gemini-3.6-flash";
 
 
+/* ============================================================
+   MAIN NETLIFY FUNCTION
+============================================================ */
+
 export default async function handler(
-    req,
-    res
+    request
 ) {
 
-    /* --------------------------------------------------------
+    /* ========================================================
        CORS
-    -------------------------------------------------------- */
+    ======================================================== */
 
-    res.setHeader(
-        "Access-Control-Allow-Origin",
-        "*"
-    );
+    const headers = {
 
-    res.setHeader(
-        "Access-Control-Allow-Methods",
-        "POST, OPTIONS"
-    );
+        "Access-Control-Allow-Origin":
+            "*",
 
-    res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Content-Type"
-    );
+        "Access-Control-Allow-Methods":
+            "POST, OPTIONS",
 
+        "Access-Control-Allow-Headers":
+            "Content-Type",
+
+        "Content-Type":
+            "application/json"
+
+    };
+
+
+    /* ========================================================
+       OPTIONS / PREFLIGHT
+    ======================================================== */
 
     if (
-        req.method === "OPTIONS"
+        request.method ===
+        "OPTIONS"
     ) {
 
-        return res
-            .status(200)
-            .end();
+        return new Response(
+            null,
+            {
+                status: 204,
+                headers
+            }
+        );
     }
 
 
+    /* ========================================================
+       ONLY POST
+    ======================================================== */
+
     if (
-        req.method !== "POST"
+        request.method !==
+        "POST"
     ) {
 
-        return res
-            .status(405)
-            .json({
+        return new Response(
+
+            JSON.stringify({
+
                 error:
-                    "Method not allowed"
-            });
+                    "Method not allowed."
+
+            }),
+
+            {
+                status: 405,
+                headers
+            }
+        );
     }
 
 
-    /* --------------------------------------------------------
-       API KEY
-    -------------------------------------------------------- */
+    /* ========================================================
+       GET GEMINI API KEY
+    ======================================================== */
 
     const apiKey =
-        process.env.GEMINI_API_KEY;
-
-
-    if (!apiKey) {
-
-        return res
-            .status(500)
-            .json({
-
-                error:
-                    "GEMINI_API_KEY is not configured on Vercel."
-            });
-    }
-
-
-    /* --------------------------------------------------------
-       REQUEST
-    -------------------------------------------------------- */
-
-    const question =
         String(
-            req.body?.prompt ||
-            req.body?.question ||
-            ""
+
+            Netlify
+                .env
+                .get(
+                    "GEMINI_API_KEY"
+                ) || ""
+
         ).trim();
 
 
-    if (!question) {
+    if (
+        !apiKey
+    ) {
 
-        return res
-            .status(400)
-            .json({
+        console.error(
+            "[CrazeMind] GEMINI_API_KEY is missing."
+        );
+
+
+        return new Response(
+
+            JSON.stringify({
 
                 error:
-                    "No question provided."
-            });
+                    "GEMINI_API_KEY is not configured on Netlify."
+
+            }),
+
+            {
+                status: 500,
+                headers
+            }
+        );
     }
 
 
-    /* --------------------------------------------------------
-       GEMINI REQUEST
-    -------------------------------------------------------- */
+    /* ========================================================
+       READ REQUEST BODY
+    ======================================================== */
+
+    let body;
+
+
+    try {
+
+        body =
+            await request.json();
+
+    } catch (
+        error
+    ) {
+
+        console.error(
+            "[CrazeMind] Invalid request JSON:",
+            error
+        );
+
+
+        return new Response(
+
+            JSON.stringify({
+
+                error:
+                    "Invalid JSON request."
+
+            }),
+
+            {
+                status: 400,
+                headers
+            }
+        );
+    }
+
+
+    /* ========================================================
+       GET QUESTION
+    ======================================================== */
+
+    const question =
+        String(
+
+            body?.question ||
+            body?.prompt ||
+            ""
+
+        ).trim();
+
+
+    if (
+        !question
+    ) {
+
+        return new Response(
+
+            JSON.stringify({
+
+                error:
+                    "No question provided."
+
+            }),
+
+            {
+                status: 400,
+                headers
+            }
+        );
+    }
+
+
+    /* ========================================================
+       GEMINI API URL
+    ======================================================== */
 
     const url =
-        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+        "https://generativelanguage.googleapis.com/" +
+        "v1beta/models/" +
+        MODEL +
+        ":generateContent";
 
+
+    /* ========================================================
+       CALL GEMINI
+    ======================================================== */
 
     try {
 
         const response =
             await fetch(
+
                 url,
+
                 {
 
                     method:
@@ -126,6 +264,7 @@ export default async function handler(
 
                         "x-goog-api-key":
                             apiKey
+
                     },
 
                     body:
@@ -134,17 +273,21 @@ export default async function handler(
                             contents: [
 
                                 {
+
                                     role:
                                         "user",
 
                                     parts: [
 
                                         {
+
                                             text:
                                                 question
+
                                         }
 
                                     ]
+
                                 }
 
                             ],
@@ -156,56 +299,100 @@ export default async function handler(
 
                                 maxOutputTokens:
                                     2048
+
                             }
+
                         })
+
                 }
             );
 
 
-        const text =
+        /* ====================================================
+           READ GEMINI RESPONSE
+        ==================================================== */
+
+        const raw =
             await response.text();
 
+
+        /* ====================================================
+           GEMINI HTTP ERROR
+        ==================================================== */
 
         if (
             !response.ok
         ) {
 
             let details =
-                text;
+                raw;
 
 
             try {
 
                 const errorData =
                     JSON.parse(
-                        text
+                        raw
                     );
 
 
                 details =
-                    errorData?.error?.message ||
-                    errorData?.error ||
-                    text;
+                    errorData
+                        ?.error
+                        ?.message ||
+                    errorData
+                        ?.error ||
+                    raw;
 
             } catch {
+
                 // Keep raw response.
+
             }
 
 
-            return res
-                .status(
-                    response.status
-                )
-                .json({
+            console.error(
+
+                "[CrazeMind] Gemini API error:",
+                response.status,
+                details
+
+            );
+
+
+            return new Response(
+
+                JSON.stringify({
 
                     error:
                         "Gemini request failed.",
 
                     details:
-                        details
-                });
+                        details,
+
+                    status:
+                        response.status,
+
+                    model:
+                        MODEL
+
+                }),
+
+                {
+
+                    status:
+                        response.status,
+
+                    headers
+
+                }
+            );
         }
 
+
+        /* ====================================================
+           PARSE GEMINI JSON
+        ==================================================== */
 
         let data;
 
@@ -214,52 +401,122 @@ export default async function handler(
 
             data =
                 JSON.parse(
-                    text
+                    raw
                 );
 
-        } catch {
+        } catch (
+            error
+        ) {
 
-            return res
-                .status(502)
-                .json({
+            console.error(
+
+                "[CrazeMind] Invalid Gemini JSON:",
+                error
+
+            );
+
+
+            return new Response(
+
+                JSON.stringify({
 
                     error:
                         "Gemini returned invalid JSON."
-                });
+
+                }),
+
+                {
+
+                    status:
+                        502,
+
+                    headers
+
+                }
+            );
         }
 
 
-        /* ----------------------------------------------------
-           EXTRACT TEXT
-        ---------------------------------------------------- */
+        /* ====================================================
+           EXTRACT ANSWER
+        ==================================================== */
 
         const answer =
             data
                 ?.candidates?.[0]
-                ?.content?.parts
+                ?.content
+                ?.parts
                 ?.map(
                     part =>
-                        part.text || ""
+                        String(
+                            part?.text ||
+                            ""
+                        )
                 )
                 .join("")
                 .trim();
 
 
-        if (!answer) {
+        /* ====================================================
+           CHECK EMPTY ANSWER
+        ==================================================== */
 
-            return res
-                .status(502)
-                .json({
+        if (
+            !answer
+        ) {
+
+            const reason =
+                data
+                    ?.promptFeedback
+                    ?.blockReason ||
+                data
+                    ?.candidates?.[0]
+                    ?.finishReason ||
+                "Gemini returned no text.";
+
+
+            console.error(
+
+                "[CrazeMind] Gemini returned no answer:",
+                reason
+
+            );
+
+
+            return new Response(
+
+                JSON.stringify({
 
                     error:
-                        "Gemini did not return any text."
-                });
+                        "Gemini did not return any text.",
+
+                    details:
+                        reason,
+
+                    model:
+                        MODEL
+
+                }),
+
+                {
+
+                    status:
+                        502,
+
+                    headers
+
+                }
+            );
         }
 
 
-        return res
-            .status(200)
-            .json({
+        /* ====================================================
+           SUCCESS
+        ==================================================== */
+
+        return new Response(
+
+            JSON.stringify({
 
                 answer:
                     answer,
@@ -269,19 +526,38 @@ export default async function handler(
 
                 source:
                     "Gemini"
-            });
 
-    } catch (error) {
+            }),
+
+            {
+
+                status:
+                    200,
+
+                headers
+
+            }
+        );
+
+    } catch (
+        error
+    ) {
+
+        /* ====================================================
+           NETWORK / FUNCTION ERROR
+        ==================================================== */
 
         console.error(
-            "[CrazeMind] Gemini error:",
+
+            "[CrazeMind] Gemini request error:",
             error
+
         );
 
 
-        return res
-            .status(502)
-            .json({
+        return new Response(
+
+            JSON.stringify({
 
                 error:
                     "Could not contact Gemini.",
@@ -289,6 +565,17 @@ export default async function handler(
                 details:
                     error?.message ||
                     String(error)
-            });
+
+            }),
+
+            {
+
+                status:
+                    502,
+
+                headers
+
+            }
+        );
     }
 }
