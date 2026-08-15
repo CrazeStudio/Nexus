@@ -7,35 +7,24 @@ Brand: CrazeStudio
 Commands:
 
 /train 100
-    -> Train 100 dataset rows
-
 /train 500
-    -> Train 500 dataset rows
+/train 1000
 
+/train full
+/train all
 /train 0
-    -> Train the WHOLE available dataset
 
-This trainer:
+Dataset:
+    togethercomputer/llama-instruct
 
-- Uses Hugging Face
-- Uses togethercomputer/llama-instruct
-- Automatically finds the dataset config
-- Automatically finds the train split
-- Downloads 100 rows at a time
-- Stores data in IndexedDB
-- Survives page refreshes
-- Supports progress callbacks
-- Supports custom learning
-- Supports importing/exporting
-- Provides recall()
-- Provides downloadWeights()
+Storage:
+    IndexedDB
 
 IMPORTANT:
-
-This is dataset learning/retrieval.
-
-It does NOT fine-tune the neural weights of a
-7B/13B/70B Llama model inside a browser.
+This is dataset retrieval/learning.
+It does NOT perform neural-network weight
+fine-tuning of Llama.
+============================================================
 */
 
 
@@ -46,35 +35,29 @@ It does NOT fine-tune the neural weights of a
 const DATASET =
     "togethercomputer/llama-instruct";
 
-const HF_API =
-    "https://datasets-server.huggingface.co";
+const DATASET_CONFIG =
+    "default";
+
+const DATASET_SPLIT =
+    "train";
+
+const HF_ROWS_API =
+    "https://datasets-server.huggingface.co/rows";
+
+const PAGE_SIZE =
+    100;
+
+const MAX_NORMAL_TRAIN =
+    2000;
 
 const DB_NAME =
     "CrazeMindDB";
 
 const DB_VERSION =
-    2;
+    4;
 
 const STORE_NAME =
     "training";
-
-
-/*
-    Hugging Face Dataset Viewer allows
-    up to 100 rows per /rows request.
-*/
-
-const PAGE_SIZE = 100;
-
-
-/*
-    Maximum for normal /train N.
-
-    /train 0 is special and means
-    the entire dataset.
-*/
-
-const MAX_NORMAL_TRAIN = 2000;
 
 
 /* ============================================================
@@ -84,126 +67,127 @@ const MAX_NORMAL_TRAIN = 2000;
 const builtInExamples = [
 
     {
-        input:
-            "what is ai",
+        input: "what is ai",
 
         output:
             "## Artificial Intelligence\n\n" +
             "Artificial intelligence (AI) is technology " +
             "that allows computers to perform tasks " +
-            "that normally require human intelligence."
+            "that normally require human intelligence.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "what is artificial intelligence",
+        input: "what is artificial intelligence",
 
         output:
             "## Artificial Intelligence\n\n" +
             "AI is the field of creating computer systems " +
             "that can perform tasks such as reasoning, " +
-            "learning, perception, and language processing."
+            "learning, perception, and language processing.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "who created you",
+        input: "who created you",
 
         output:
             "## CrazeMind\n\n" +
-            "I am **CrazeMind**, an AI created by **CrazeStudio**."
+            "I am **CrazeMind**, an AI created by **CrazeStudio**.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "who made you",
+        input: "who made you",
 
         output:
-            "I am **CrazeMind**, created by **CrazeStudio**."
+            "I am **CrazeMind**, created by **CrazeStudio**.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "what is crazemind",
+        input: "what is crazemind",
 
         output:
             "## CrazeMind\n\n" +
-            "CrazeMind is an AI project created by **CrazeStudio**."
+            "CrazeMind is an AI project created by **CrazeStudio**.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "what is javascript",
+        input: "what is javascript",
 
         output:
             "## JavaScript\n\n" +
             "JavaScript is a programming language commonly " +
-            "used to create interactive websites and web applications."
+            "used to create interactive websites and web applications.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "what is html",
+        input: "what is html",
 
         output:
             "## HTML\n\n" +
             "HTML stands for **HyperText Markup Language**. " +
-            "It provides the structure of web pages."
+            "It provides the structure of web pages.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "what is css",
+        input: "what is css",
 
         output:
             "## CSS\n\n" +
             "CSS stands for **Cascading Style Sheets**. " +
-            "It controls the appearance and layout of web pages."
+            "It controls the appearance and layout of web pages.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "what is python",
+        input: "what is python",
 
         output:
             "## Python\n\n" +
             "Python is a high-level programming language " +
-            "known for its readable syntax."
+            "known for its readable syntax.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "hello",
+        input: "hello",
 
         output:
-            "Hello! I'm **CrazeMind**, created by **CrazeStudio**."
+            "Hello! I'm **CrazeMind**, created by **CrazeStudio**.",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "hi",
+        input: "hi",
 
         output:
-            "Hi! I'm **CrazeMind**. How can I help?"
+            "Hi! I'm **CrazeMind**. How can I help?",
+
+        source: "CrazeMind"
     },
 
-
     {
-        input:
-            "hey",
+        input: "hey",
 
         output:
-            "Hey! I'm **CrazeMind**. What can I help you with?"
+            "Hey! I'm **CrazeMind**. What can I help you with?",
+
+        source: "CrazeMind"
     }
 
 ];
@@ -230,7 +214,7 @@ function normalize(text) {
 
 
 /* ============================================================
-   OPEN INDEXEDDB
+   OPEN DATABASE
 ============================================================ */
 
 function openDatabase() {
@@ -239,12 +223,13 @@ function openDatabase() {
         (resolve, reject) => {
 
             if (
-                !("indexedDB" in window)
+                typeof indexedDB ===
+                "undefined"
             ) {
 
                 reject(
                     new Error(
-                        "IndexedDB is not available in this browser."
+                        "IndexedDB is not available."
                     )
                 );
 
@@ -265,15 +250,16 @@ function openDatabase() {
                     const db =
                         event.target.result;
 
+                    let store;
+
 
                     if (
-                        !db.objectStoreNames
-                            .contains(
-                                STORE_NAME
-                            )
+                        !db.objectStoreNames.contains(
+                            STORE_NAME
+                        )
                     ) {
 
-                        const store =
+                        store =
                             db.createObjectStore(
                                 STORE_NAME,
                                 {
@@ -282,21 +268,45 @@ function openDatabase() {
                                 }
                             );
 
+                    } else {
+
+                        store =
+                            event.target.transaction
+                                .objectStore(
+                                    STORE_NAME
+                                );
+                    }
+
+
+                    if (
+                        !store.indexNames.contains(
+                            "input"
+                        )
+                    ) {
 
                         store.createIndex(
                             "input",
                             "input",
                             {
-                                unique: false
+                                unique:
+                                    false
                             }
                         );
+                    }
 
+
+                    if (
+                        !store.indexNames.contains(
+                            "source"
+                        )
+                    ) {
 
                         store.createIndex(
                             "source",
                             "source",
                             {
-                                unique: false
+                                unique:
+                                    false
                             }
                         );
                     }
@@ -316,7 +326,10 @@ function openDatabase() {
                 () => {
 
                     reject(
-                        request.error
+                        new Error(
+                            request.error?.message ||
+                            "Could not open IndexedDB."
+                        )
                     );
                 };
         }
@@ -325,17 +338,16 @@ function openDatabase() {
 
 
 /* ============================================================
-   STORE MANY EXAMPLES
+   SAVE ONE PAGE
 ============================================================ */
 
 async function storeExamples(
-    examples,
-    onProgress
+    examples
 ) {
 
     if (
         !Array.isArray(examples) ||
-        !examples.length
+        examples.length === 0
     ) {
 
         return 0;
@@ -349,11 +361,32 @@ async function storeExamples(
     return new Promise(
         (resolve, reject) => {
 
-            const transaction =
-                db.transaction(
-                    STORE_NAME,
-                    "readwrite"
+            let transaction;
+
+
+            try {
+
+                transaction =
+                    db.transaction(
+                        STORE_NAME,
+                        "readwrite"
+                    );
+
+            } catch (error) {
+
+                db.close();
+
+                reject(
+                    new Error(
+                        `Database transaction failed: ${
+                            error?.message ||
+                            String(error)
+                        }`
+                    )
                 );
+
+                return;
+            }
 
 
             const store =
@@ -365,90 +398,110 @@ async function storeExamples(
             let saved = 0;
 
 
-            for (
-                let i = 0;
-                i < examples.length;
-                i++
-            ) {
+            try {
 
-                const example =
-                    examples[i];
-
-
-                if (
-                    !example ||
-                    !example.input ||
-                    !example.output
+                for (
+                    const example
+                    of examples
                 ) {
 
-                    continue;
-                }
+                    if (
+                        !example ||
+                        !example.input ||
+                        !example.output
+                    ) {
+
+                        continue;
+                    }
 
 
-                const input =
-                    String(
-                        example.input
-                    ).trim();
+                    const input =
+                        String(
+                            example.input
+                        ).trim();
 
 
-                const output =
-                    String(
-                        example.output
-                    ).trim();
+                    const output =
+                        String(
+                            example.output
+                        ).trim();
 
 
-                const id =
-                    normalize(
-                        input
+                    const id =
+                        normalize(
+                            input
+                        );
+
+
+                    if (
+                        !id ||
+                        !output
+                    ) {
+
+                        continue;
+                    }
+
+
+                    /*
+                        Keep records small and safe.
+                    */
+
+                    const record = {
+
+                        id:
+                            String(id),
+
+                        input:
+                            String(input),
+
+                        output:
+                            String(output),
+
+                        source:
+                            String(
+                                example.source ||
+                                DATASET
+                            ),
+
+                        trainedAt:
+                            Date.now()
+                    };
+
+
+                    store.put(
+                        record
                     );
 
 
-                if (
-                    !id ||
-                    !output
-                ) {
-
-                    continue;
+                    saved++;
                 }
 
+            } catch (error) {
 
-                store.put({
-
-                    id,
-
-                    input,
-
-                    output,
-
-                    source:
-                        example.source ||
-                        "unknown",
-
-                    trainedAt:
-                        Date.now()
-                });
+                try {
+                    db.close();
+                } catch {}
 
 
-                saved++;
+                reject(
+                    new Error(
+                        `Failed to save training page: ${
+                            error?.message ||
+                            String(error)
+                        }`
+                    )
+                );
+
+                return;
             }
 
 
             transaction.oncomplete =
                 () => {
 
-                    db.close();
-
-                    if (
-                        typeof onProgress ===
-                        "function"
-                    ) {
-
-                        onProgress(
-                            saved,
-                            examples.length
-                        );
-                    }
-
+                    try {
+                        db.close();
+                    } catch {}
 
                     resolve(
                         saved
@@ -459,10 +512,47 @@ async function storeExamples(
             transaction.onerror =
                 () => {
 
-                    db.close();
+                    const error =
+                        transaction.error;
+
+
+                    try {
+                        db.close();
+                    } catch {}
+
 
                     reject(
-                        transaction.error
+                        new Error(
+                            `IndexedDB error: ${
+                                error?.message ||
+                                String(error) ||
+                                "Unknown error"
+                            }`
+                        )
+                    );
+                };
+
+
+            transaction.onabort =
+                () => {
+
+                    const error =
+                        transaction.error;
+
+
+                    try {
+                        db.close();
+                    } catch {}
+
+
+                    reject(
+                        new Error(
+                            `IndexedDB transaction aborted: ${
+                                error?.message ||
+                                String(error) ||
+                                "Unknown error"
+                            }`
+                        )
                     );
                 };
         }
@@ -471,147 +561,17 @@ async function storeExamples(
 
 
 /* ============================================================
-   GET HUGGING FACE DATASET CONFIG
-============================================================ */
-
-/*
-    IMPORTANT:
-
-    We DON'T use:
-
-        config=default
-
-    blindly.
-
-    We first ask Hugging Face what configs
-    and splits actually exist.
-*/
-
-export async function getDatasetConfig() {
-
-    const url =
-        new URL(
-            `${HF_API}/splits`
-        );
-
-
-    url.searchParams.set(
-        "dataset",
-        DATASET
-    );
-
-
-    const response =
-        await fetch(
-            url.toString()
-        );
-
-
-    if (
-        !response.ok
-    ) {
-
-        let message =
-            "";
-
-
-        try {
-
-            const error =
-                await response.json();
-
-
-            message =
-                error?.error ||
-                "";
-
-        } catch {
-            // Ignore.
-        }
-
-
-        throw new Error(
-            `Hugging Face dataset configuration failed ` +
-            `(${response.status})` +
-            (
-                message
-                    ? `: ${message}`
-                    : ""
-            )
-        );
-    }
-
-
-    const data =
-        await response.json();
-
-
-    const splits =
-        Array.isArray(
-            data.splits
-        )
-            ? data.splits
-            : [];
-
-
-    if (
-        !splits.length
-    ) {
-
-        throw new Error(
-            "Hugging Face returned no dataset splits."
-        );
-    }
-
-
-    /*
-        Prefer the train split.
-    */
-
-    const selected =
-        splits.find(
-            item =>
-                item.split ===
-                "train"
-        ) ||
-        splits[0];
-
-
-    return {
-
-        config:
-            selected.config,
-
-        split:
-            selected.split,
-
-        rows:
-            Number(
-                selected.num_examples
-            ) || 0,
-
-        bytes:
-            Number(
-                selected.num_bytes
-            ) || 0
-    };
-}
-
-
-/* ============================================================
-   FETCH ONE PAGE
+   FETCH HUGGING FACE ROWS
 ============================================================ */
 
 async function fetchRows(
-    config,
-    split,
     offset,
     length
 ) {
 
     const url =
         new URL(
-            `${HF_API}/rows`
+            HF_ROWS_API
         );
 
 
@@ -623,13 +583,13 @@ async function fetchRows(
 
     url.searchParams.set(
         "config",
-        config
+        DATASET_CONFIG
     );
 
 
     url.searchParams.set(
         "split",
-        split
+        DATASET_SPLIT
     );
 
 
@@ -643,25 +603,48 @@ async function fetchRows(
         "length",
         String(
             Math.min(
-                length,
-                PAGE_SIZE
+                PAGE_SIZE,
+                length
             )
         )
     );
 
 
-    const response =
-        await fetch(
-            url.toString()
+    let response;
+
+
+    try {
+
+        response =
+            await fetch(
+                url.toString(),
+                {
+                    method:
+                        "GET",
+
+                    headers: {
+                        Accept:
+                            "application/json"
+                    }
+                }
+            );
+
+    } catch (error) {
+
+        throw new Error(
+            `Network error while contacting Hugging Face: ${
+                error?.message ||
+                String(error)
+            }`
         );
+    }
 
 
     if (
         !response.ok
     ) {
 
-        let detail =
-            "";
+        let detail = "";
 
 
         try {
@@ -672,31 +655,50 @@ async function fetchRows(
 
             detail =
                 error?.error ||
+                error?.message ||
                 "";
 
         } catch {
-            // Ignore.
+            // Response was not JSON.
         }
 
 
         throw new Error(
-            `Hugging Face rows request failed ` +
-            `(${response.status})` +
+            `Hugging Face request failed: ${response.status}` +
             (
                 detail
-                    ? `: ${detail}`
+                    ? ` — ${detail}`
                     : ""
             )
         );
     }
 
 
-    return await response.json();
+    let data;
+
+
+    try {
+
+        data =
+            await response.json();
+
+    } catch (error) {
+
+        throw new Error(
+            `Hugging Face returned invalid JSON: ${
+                error?.message ||
+                String(error)
+            }`
+        );
+    }
+
+
+    return data;
 }
 
 
 /* ============================================================
-   PARSE LLAMA-INSTRUCT TEXT
+   PARSE LLAMA TEXT
 ============================================================ */
 
 function parseLlamaText(
@@ -704,12 +706,8 @@ function parseLlamaText(
 ) {
 
     if (!text) {
-
         return [];
     }
-
-
-    const results = [];
 
 
     const clean =
@@ -718,8 +716,12 @@ function parseLlamaText(
         ).trim();
 
 
+    const results =
+        [];
+
+
     /*
-        Standard Llama-Instruct style:
+        Standard Llama format:
 
         [INST] question [/INST] answer
     */
@@ -771,33 +773,44 @@ function parseLlamaText(
 
 
     /*
-        Fallback for rows where only one
-        instruction block is found.
+        Fallback.
     */
 
     if (
-        !results.length
+        results.length === 0
     ) {
 
-        const instruction =
-            clean.match(
-                /\[INST\]\s*([\s\S]*?)\s*\[\/INST\]/i
+        const start =
+            clean.indexOf(
+                "[INST]"
+            );
+
+
+        const end =
+            clean.indexOf(
+                "[/INST]"
             );
 
 
         if (
-            instruction
+            start !== -1 &&
+            end !== -1 &&
+            end > start
         ) {
 
             const input =
-                instruction[1]
+                clean
+                    .slice(
+                        start + 6,
+                        end
+                    )
                     .trim();
 
 
             const output =
                 clean
                     .slice(
-                        instruction[0].length
+                        end + 7
                     )
                     .trim();
 
@@ -826,99 +839,67 @@ function parseLlamaText(
 
 
 /* ============================================================
-   PARSE HUGGING FACE ROW
+   PARSE ROW
 ============================================================ */
 
 function parseRow(
-    row
+    item
 ) {
 
-    if (!row) {
-
+    if (!item) {
         return [];
     }
 
 
-    const value =
-        row.row;
+    const row =
+        item.row ||
+        item;
 
-
-    /*
-        Normal format:
-        { row: { text: "..." } }
-    */
 
     if (
-        value &&
-        typeof value.text ===
+        typeof row.text ===
         "string"
     ) {
 
         return parseLlamaText(
-            value.text
+            row.text
         );
     }
 
 
-    /*
-        Some datasets expose the
-        row directly as a string.
-    */
+    const input =
+        row.prompt ||
+        row.instruction ||
+        row.question ||
+        row.input;
+
+
+    const output =
+        row.response ||
+        row.output ||
+        row.answer;
+
 
     if (
-        typeof value ===
-        "string"
+        input &&
+        output
     ) {
 
-        return parseLlamaText(
-            value
-        );
-    }
+        return [{
 
+            input:
+                String(
+                    input
+                ),
 
-    /*
-        Generic fallback.
-    */
+            output:
+                String(
+                    output
+                ),
 
-    if (
-        value &&
-        typeof value ===
-        "object"
-    ) {
-
-        const input =
-            value.prompt ||
-            value.instruction ||
-            value.question;
-
-
-        const output =
-            value.response ||
-            value.output ||
-            value.answer;
-
-
-        if (
-            input &&
-            output
-        ) {
-
-            return [{
-
-                input:
-                    String(
-                        input
-                    ),
-
-                output:
-                    String(
-                        output
-                    ),
-
-                source:
-                    DATASET
-            }];
-        }
+            source:
+                DATASET
+        }];
     }
 
 
@@ -927,7 +908,7 @@ function parseRow(
 
 
 /* ============================================================
-   DOWNLOAD LLAMA DATA
+   DOWNLOAD DATASET
 ============================================================ */
 
 export async function downloadLlamaData(
@@ -947,7 +928,8 @@ export async function downloadLlamaData(
         )
     ) {
 
-        requested = 20;
+        requested =
+            20;
     }
 
 
@@ -958,18 +940,12 @@ export async function downloadLlamaData(
 
 
     /*
-        SPECIAL COMMAND:
-
-        0 = WHOLE DATASET
+        0 = full dataset.
     */
 
     const wholeDataset =
         requested === 0;
 
-
-    /*
-        Negative values are invalid.
-    */
 
     if (
         requested < 0
@@ -980,10 +956,6 @@ export async function downloadLlamaData(
         );
     }
 
-
-    /*
-        Normal training limit.
-    */
 
     if (
         !wholeDataset
@@ -1007,97 +979,8 @@ export async function downloadLlamaData(
             : null;
 
 
-    /* --------------------------------------------------------
-       FIND DATASET CONFIG
-    -------------------------------------------------------- */
-
-    if (onProgress) {
-
-        onProgress({
-
-            phase:
-                "checking",
-
-            current:
-                0,
-
-            total:
-                wholeDataset
-                    ? 0
-                    : requested,
-
-            percent:
-                0,
-
-            message:
-                "Checking Llama-Instruct dataset…"
-        });
-    }
-
-
-    const config =
-        await getDatasetConfig();
-
-
     /*
-        For /train 0, use the actual
-        number of dataset rows.
-    */
-
-    const targetRows =
-        wholeDataset
-            ? config.rows
-            : requested;
-
-
-    if (
-        !targetRows ||
-        targetRows < 1
-    ) {
-
-        throw new Error(
-            "Hugging Face did not return a valid " +
-            "training dataset size."
-        );
-    }
-
-
-    if (onProgress) {
-
-        onProgress({
-
-            phase:
-                "ready",
-
-            current:
-                0,
-
-            total:
-                targetRows,
-
-            percent:
-                0,
-
-            message:
-                wholeDataset
-                    ? `Whole dataset: ${targetRows} rows`
-                    : `${targetRows} rows selected`
-        });
-    }
-
-
-    /*
-        We don't keep the entire dataset in RAM.
-
-        Instead:
-
-        Download page
-             ↓
-        Parse page
-             ↓
-        Save page
-             ↓
-        Continue
+        Allow resuming from an offset.
     */
 
     let offset =
@@ -1109,26 +992,20 @@ export async function downloadLlamaData(
         );
 
 
-    let rowsProcessed =
-        0;
+    let rowsProcessed = 0;
+    let examplesSaved = 0;
 
-
-    let examplesSaved =
-        0;
-
-
-    /*
-        Start / resume until all rows are done.
-    */
 
     while (
-        rowsProcessed <
-        targetRows
+        wholeDataset ||
+        rowsProcessed < requested
     ) {
 
         const remaining =
-            targetRows -
-            rowsProcessed;
+            wholeDataset
+                ? PAGE_SIZE
+                : requested -
+                  rowsProcessed;
 
 
         const pageLength =
@@ -1149,19 +1026,27 @@ export async function downloadLlamaData(
                     rowsProcessed,
 
                 total:
-                    targetRows,
+                    wholeDataset
+                        ? null
+                        : requested,
 
                 percent:
-                    Math.round(
-                        (
-                            rowsProcessed /
-                            targetRows
-                        ) *
-                        100
-                    ),
+                    wholeDataset
+                        ? null
+                        : Math.round(
+                            (
+                                rowsProcessed /
+                                requested
+                            ) * 100
+                        ),
+
+                examples:
+                    examplesSaved,
 
                 message:
-                    `Downloading ${rowsProcessed}/${targetRows} rows…`
+                    wholeDataset
+                        ? `Downloading row ${offset}...`
+                        : `Downloading ${rowsProcessed}/${requested}...`
             });
         }
 
@@ -1172,8 +1057,6 @@ export async function downloadLlamaData(
 
         const data =
             await fetchRows(
-                config.config,
-                config.split,
                 offset,
                 pageLength
             );
@@ -1181,18 +1064,18 @@ export async function downloadLlamaData(
 
         const rows =
             Array.isArray(
-                data.rows
+                data?.rows
             )
                 ? data.rows
                 : [];
 
 
         /*
-            Dataset ended.
+            Dataset finished.
         */
 
         if (
-            !rows.length
+            rows.length === 0
         ) {
 
             break;
@@ -1200,51 +1083,76 @@ export async function downloadLlamaData(
 
 
         /*
-            Convert this page into
-            instruction/answer examples.
+            Parse.
         */
 
-        const pageExamples =
+        const examples =
             [];
 
 
         for (
-            const row of rows
+            const row
+            of rows
         ) {
 
-            const parsed =
-                parseRow(
-                    row
+            try {
+
+                const parsed =
+                    parseRow(
+                        row
+                    );
+
+
+                if (
+                    parsed.length
+                ) {
+
+                    examples.push(
+                        ...parsed
+                    );
+                }
+
+            } catch (error) {
+
+                console.warn(
+                    "Could not parse row:",
+                    error
                 );
-
-
-            pageExamples.push(
-                ...parsed
-            );
+            }
         }
 
 
         /*
-            Immediately save this page.
+            SAVE ONLY THIS PAGE.
 
-            This is important for a phone:
-            if the browser crashes halfway through
-            a 19k-row training run, previously saved
-            pages remain in IndexedDB.
+            This prevents one huge IndexedDB
+            transaction.
         */
 
         if (
-            pageExamples.length
+            examples.length
         ) {
 
-            const saved =
-                await storeExamples(
-                    pageExamples
+            try {
+
+                const saved =
+                    await storeExamples(
+                        examples
+                    );
+
+
+                examplesSaved +=
+                    saved;
+
+            } catch (error) {
+
+                throw new Error(
+                    `Training stopped at dataset row ${offset}: ${
+                        error?.message ||
+                        String(error)
+                    }`
                 );
-
-
-            examplesSaved +=
-                saved;
+            }
         }
 
 
@@ -1267,42 +1175,46 @@ export async function downloadLlamaData(
                     rowsProcessed,
 
                 total:
-                    targetRows,
+                    wholeDataset
+                        ? null
+                        : requested,
 
                 percent:
-                    Math.round(
-                        (
-                            rowsProcessed /
-                            targetRows
-                        ) *
-                        100
-                    ),
+                    wholeDataset
+                        ? null
+                        : Math.round(
+                            (
+                                rowsProcessed /
+                                requested
+                            ) * 100
+                        ),
 
                 examples:
                     examplesSaved,
 
                 message:
-                    `Learned ${rowsProcessed}/${targetRows} dataset rows`
+                    wholeDataset
+                        ? `Learned ${examplesSaved} examples — ${rowsProcessed} rows processed`
+                        : `Learned ${examplesSaved} examples`
             });
         }
 
 
         /*
-            Protect the UI.
+            Normal training finished.
         */
 
-        await new Promise(
-            resolve =>
-                setTimeout(
-                    resolve,
-                    0
-                )
-        );
+        if (
+            !wholeDataset &&
+            rowsProcessed >= requested
+        ) {
+
+            break;
+        }
 
 
         /*
-            If the server returns fewer rows
-            than requested, we reached the end.
+            Short page means end.
         */
 
         if (
@@ -1312,6 +1224,29 @@ export async function downloadLlamaData(
 
             break;
         }
+
+
+        /*
+            Give the browser time to breathe.
+        */
+
+        await new Promise(
+            resolve =>
+                setTimeout(
+                    resolve,
+                    10
+                )
+        );
+    }
+
+
+    if (
+        examplesSaved === 0
+    ) {
+
+        throw new Error(
+            "Hugging Face returned data, but no usable training examples were found."
+        );
     }
 
 
@@ -1326,7 +1261,9 @@ export async function downloadLlamaData(
                 rowsProcessed,
 
             total:
-                targetRows,
+                wholeDataset
+                    ? rowsProcessed
+                    : requested,
 
             percent:
                 100,
@@ -1335,7 +1272,9 @@ export async function downloadLlamaData(
                 examplesSaved,
 
             message:
-                `Training complete: ${examplesSaved} examples learned.`
+                wholeDataset
+                    ? `Full training complete: ${examplesSaved} examples`
+                    : `Training complete: ${examplesSaved} examples`
         });
     }
 
@@ -1348,16 +1287,19 @@ export async function downloadLlamaData(
         examples:
             examplesSaved,
 
-        targetRows,
-
-        config:
-            config.config,
-
-        split:
-            config.split,
+        targetRows:
+            wholeDataset
+                ? rowsProcessed
+                : requested,
 
         dataset:
             DATASET,
+
+        config:
+            DATASET_CONFIG,
+
+        split:
+            DATASET_SPLIT,
 
         wholeDataset
     };
@@ -1365,7 +1307,7 @@ export async function downloadLlamaData(
 
 
 /* ============================================================
-   TRAIN CRAZEMIND
+   MAIN TRAINER
 ============================================================ */
 
 export async function trainCrazeMind(
@@ -1379,10 +1321,6 @@ export async function trainCrazeMind(
             ? options.onProgress
             : null;
 
-
-    /*
-        Install built-in knowledge first.
-    */
 
     if (onProgress) {
 
@@ -1400,28 +1338,34 @@ export async function trainCrazeMind(
             percent:
                 0,
 
+            examples:
+                0,
+
             message:
-                "Initializing CrazeMind…"
+                "Initializing CrazeMind..."
         });
     }
 
 
-    const builtInSaved =
+    /*
+        Save built-in knowledge.
+    */
+
+    const builtIn =
         await storeExamples(
             builtInExamples
         );
 
 
     /*
-        Download + learn Llama data.
+        Download dataset.
     */
 
-    const llama =
+    const result =
         await downloadLlamaData(
             amount,
             {
                 ...options,
-
                 onProgress
             }
         );
@@ -1433,25 +1377,24 @@ export async function trainCrazeMind(
             amount,
 
         wholeDataset:
-            llama.wholeDataset,
+            result.wholeDataset,
 
         datasetRows:
-            llama.rows,
+            result.rows,
 
         trainedExamples:
-            llama.examples,
+            result.examples,
 
-        builtIn:
-            builtInSaved,
+        builtIn,
 
         dataset:
-            DATASET,
+            result.dataset,
 
         config:
-            llama.config,
+            result.config,
 
         split:
-            llama.split,
+            result.split,
 
         mode:
             "llama-instruct-retrieval"
@@ -1460,7 +1403,7 @@ export async function trainCrazeMind(
 
 
 /* ============================================================
-   LEARN ONE EXAMPLE
+   LEARN ONE
 ============================================================ */
 
 export async function learn(
@@ -1477,23 +1420,24 @@ export async function learn(
     }
 
 
-    return await storeExamples([
-        {
+    const saved =
+        await storeExamples([
 
-            input:
-                String(
-                    input
-                ),
+            {
+                input:
+                    String(input),
 
-            output:
-                String(
-                    output
-                ),
+                output:
+                    String(output),
 
-            source:
-                "user"
-        }
-    ]);
+                source:
+                    "user"
+            }
+
+        ]);
+
+
+    return saved > 0;
 }
 
 
@@ -1512,266 +1456,70 @@ export async function recall(
 
 
     if (!key) {
-
         return null;
     }
 
-
-    try {
-
-        const db =
-            await openDatabase();
-
-
-        return await new Promise(
-            resolve => {
-
-                const transaction =
-                    db.transaction(
-                        STORE_NAME,
-                        "readonly"
-                    );
-
-
-                const store =
-                    transaction.objectStore(
-                        STORE_NAME
-                    );
-
-
-                /*
-                    First try exact match.
-                */
-
-                const request =
-                    store.get(
-                        key
-                    );
-
-
-                request.onsuccess =
-                    () => {
-
-                        const result =
-                            request.result;
-
-
-                        db.close();
-
-
-                        resolve(
-                            result
-                                ? result.output
-                                : null
-                        );
-                    };
-
-
-                request.onerror =
-                    () => {
-
-                        db.close();
-
-                        resolve(
-                            null
-                        );
-                    };
-            }
-        );
-
-    } catch (error) {
-
-        console.error(
-            "CrazeMind recall:",
-            error
-        );
-
-
-        return null;
-    }
-}
-
-
-/* ============================================================
-   GET ALL KNOWLEDGE
-============================================================ */
-
-export async function exportDataset() {
 
     const db =
         await openDatabase();
 
 
-    const data =
-        await new Promise(
-            (resolve, reject) => {
+    return new Promise(
+        resolve => {
 
-                const transaction =
-                    db.transaction(
-                        STORE_NAME,
-                        "readonly"
+            const transaction =
+                db.transaction(
+                    STORE_NAME,
+                    "readonly"
+                );
+
+
+            const store =
+                transaction.objectStore(
+                    STORE_NAME
+                );
+
+
+            const request =
+                store.get(
+                    key
+                );
+
+
+            request.onsuccess =
+                () => {
+
+                    const result =
+                        request.result;
+
+
+                    db.close();
+
+
+                    resolve(
+                        result
+                            ? result.output
+                            : null
                     );
+                };
 
 
-                const store =
-                    transaction.objectStore(
-                        STORE_NAME
+            request.onerror =
+                () => {
+
+                    db.close();
+
+                    resolve(
+                        null
                     );
-
-
-                const request =
-                    store.getAll();
-
-
-                request.onsuccess =
-                    () => {
-
-                        resolve(
-                            request.result
-                        );
-                    };
-
-
-                request.onerror =
-                    () => {
-
-                        reject(
-                            request.error
-                        );
-                    };
-            }
-        );
-
-
-    db.close();
-
-
-    return data.map(
-        item => ({
-
-            input:
-                item.input,
-
-            output:
-                item.output,
-
-            source:
-                item.source,
-
-            trainedAt:
-                item.trainedAt
-        })
+                };
+        }
     );
 }
 
 
 /* ============================================================
-   TRAIN CUSTOM DATASET
-============================================================ */
-
-export async function trainDataset(
-    dataset,
-    options = {}
-) {
-
-    if (
-        !Array.isArray(
-            dataset
-        )
-    ) {
-
-        throw new TypeError(
-            "Dataset must be an array."
-        );
-    }
-
-
-    const cleaned =
-        dataset
-            .filter(
-                item =>
-                    item &&
-                    item.input &&
-                    item.output
-            )
-            .map(
-                item => ({
-
-                    input:
-                        String(
-                            item.input
-                        ),
-
-                    output:
-                        String(
-                            item.output
-                        ),
-
-                    source:
-                        item.source ||
-                        "custom"
-                })
-            );
-
-
-    const saved =
-        await storeExamples(
-            cleaned,
-
-            (
-                current,
-                total
-            ) => {
-
-                if (
-                    typeof options.onProgress ===
-                    "function"
-                ) {
-
-                    options.onProgress({
-
-                        phase:
-                            "training",
-
-                        current,
-
-                        total,
-
-                        percent:
-                            total
-                                ? Math.round(
-                                    (
-                                        current /
-                                        total
-                                    ) *
-                                    100
-                                )
-                                : 100,
-
-                        message:
-                            `Learning ${current}/${total}…`
-                    });
-                }
-            }
-        );
-
-
-    return {
-
-        trained:
-            saved,
-
-        total:
-            cleaned.length,
-
-        source:
-            "custom"
-    };
-}
-
-
-/* ============================================================
-   TRAINING STATS
+   STATISTICS
 ============================================================ */
 
 export async function getTrainingStats() {
@@ -1780,7 +1528,7 @@ export async function getTrainingStats() {
         await openDatabase();
 
 
-    return await new Promise(
+    return new Promise(
         resolve => {
 
             const transaction =
@@ -1848,7 +1596,68 @@ export async function getTrainingStats() {
 
 
 /* ============================================================
-   DOWNLOAD LEARNED DATA
+   EXPORT DATA
+============================================================ */
+
+export async function exportDataset() {
+
+    const db =
+        await openDatabase();
+
+
+    const data =
+        await new Promise(
+            (resolve, reject) => {
+
+                const transaction =
+                    db.transaction(
+                        STORE_NAME,
+                        "readonly"
+                    );
+
+
+                const store =
+                    transaction.objectStore(
+                        STORE_NAME
+                    );
+
+
+                const request =
+                    store.getAll();
+
+
+                request.onsuccess =
+                    () => {
+
+                        resolve(
+                            request.result
+                        );
+                    };
+
+
+                request.onerror =
+                    () => {
+
+                        reject(
+                            new Error(
+                                request.error?.message ||
+                                "Export failed."
+                            )
+                        );
+                    };
+            }
+        );
+
+
+    db.close();
+
+
+    return data;
+}
+
+
+/* ============================================================
+   DOWNLOAD TRAINING FILE
 ============================================================ */
 
 export async function downloadWeights() {
@@ -1857,10 +1666,10 @@ export async function downloadWeights() {
         await exportDataset();
 
 
-    const payload = {
+    const data = {
 
         format:
-            "CrazeMind-Training-v4",
+            "CrazeMind-Training-v6",
 
         brand:
             "CrazeStudio",
@@ -1872,7 +1681,7 @@ export async function downloadWeights() {
             DATASET,
 
         createdAt:
-            Date.now(),
+            new Date().toISOString(),
 
         examples
     };
@@ -1882,7 +1691,7 @@ export async function downloadWeights() {
         new Blob(
             [
                 JSON.stringify(
-                    payload,
+                    data,
                     null,
                     2
                 )
@@ -1942,7 +1751,7 @@ export async function downloadWeights() {
 
 
 /* ============================================================
-   IMPORT TRAINING
+   IMPORT
 ============================================================ */
 
 export async function importWeights(
@@ -1952,7 +1761,7 @@ export async function importWeights(
     if (!file) {
 
         throw new Error(
-            "No training file selected."
+            "No file selected."
         );
     }
 
@@ -1980,9 +1789,157 @@ export async function importWeights(
     }
 
 
-    return await trainDataset(
+    return trainDataset(
         data.examples
     );
+}
+
+
+/* ============================================================
+   CUSTOM TRAINING
+============================================================ */
+
+export async function trainDataset(
+    dataset,
+    options = {}
+) {
+
+    if (
+        !Array.isArray(
+            dataset
+        )
+    ) {
+
+        throw new TypeError(
+            "Dataset must be an array."
+        );
+    }
+
+
+    let saved = 0;
+
+
+    /*
+        Save in small batches instead of
+        one giant transaction.
+    */
+
+    const BATCH =
+        100;
+
+
+    for (
+        let i = 0;
+        i < dataset.length;
+        i += BATCH
+    ) {
+
+        const batch =
+            dataset.slice(
+                i,
+                i + BATCH
+            );
+
+
+        const cleaned =
+            batch
+                .filter(
+                    item =>
+                        item &&
+                        item.input &&
+                        item.output
+                )
+                .map(
+                    item => ({
+
+                        input:
+                            String(
+                                item.input
+                            ),
+
+                        output:
+                            String(
+                                item.output
+                            ),
+
+                        source:
+                            item.source ||
+                            "custom"
+                    })
+                );
+
+
+        if (
+            cleaned.length
+        ) {
+
+            saved +=
+                await storeExamples(
+                    cleaned
+                );
+        }
+
+
+        if (
+            typeof options.onProgress ===
+            "function"
+        ) {
+
+            options.onProgress({
+
+                phase:
+                    "training",
+
+                current:
+                    Math.min(
+                        i + BATCH,
+                        dataset.length
+                    ),
+
+                total:
+                    dataset.length,
+
+                percent:
+                    Math.round(
+                        (
+                            Math.min(
+                                i + BATCH,
+                                dataset.length
+                            ) /
+                            dataset.length
+                        ) * 100
+                    ),
+
+                examples:
+                    saved,
+
+                message:
+                    `Imported ${saved} examples`
+            });
+        }
+
+
+        await new Promise(
+            resolve =>
+                setTimeout(
+                    resolve,
+                    0
+                )
+        );
+    }
+
+
+    return {
+
+        trained:
+            saved,
+
+        total:
+            dataset.length,
+
+        source:
+            "custom"
+    };
 }
 
 
@@ -1996,7 +1953,7 @@ export async function clearTraining() {
         await openDatabase();
 
 
-    return await new Promise(
+    return new Promise(
         resolve => {
 
             const transaction =
@@ -2053,7 +2010,7 @@ export async function resetTraining(
     await clearTraining();
 
 
-    return await trainCrazeMind(
+    return trainCrazeMind(
         amount,
         options
     );
@@ -2075,8 +2032,6 @@ export const trainer = {
         trainCrazeMind,
 
     downloadLlamaData,
-
-    getDatasetConfig,
 
     trainDataset,
 
