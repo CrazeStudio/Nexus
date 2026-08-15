@@ -4,17 +4,40 @@ CrazeMind Brain
 CrazeStudio
 ============================================================
 
-Priority:
+Architecture:
 
-1. Commands
-2. Local memory
-3. Local reasoning
-4. Math engine
-5. Gemini fallback
+USER
+  ↓
+brain.js
+  ↓
+Commands
+  ↓
+Local IndexedDB memory
+  ↓
+Local math
+  ↓
+Local knowledge
+  ↓
+Gemini API
+  ↓
+Save Gemini answer to local memory
 
-Gemini is NOT used for every question.
+IMPORTANT:
+Gemini is ONLY a fallback.
+
+GitHub Pages:
+The Gemini API is called directly from the browser.
+
+WARNING:
+A Gemini API key in frontend JavaScript is visible to users.
+Use this only for testing/personal use.
 ============================================================
 */
+
+
+/* ============================================================
+   IMPORTS
+============================================================ */
 
 import {
     recall,
@@ -25,34 +48,101 @@ import {
     clearTraining
 } from "./trainer.js";
 
+
 import {
     searchText
 } from "./search.js";
 
 
 /* ============================================================
-   BASIC HELPERS
+   CONFIGURATION
 ============================================================ */
 
-function clean(text) {
-    return String(text || "")
-        .trim()
-        .toLowerCase();
+/*
+    Expected config file:
+
+    Frontend/config/gemini-config.js
+
+    It should create:
+
+    window.CRAZEMIND_CONFIG = {
+        GEMINI_API_KEY: "..."
+    };
+*/
+
+const GEMINI_API_KEY =
+    typeof window !== "undefined"
+        ? String(
+            window
+                ?.CRAZEMIND_CONFIG
+                ?.GEMINI_API_KEY ||
+            ""
+        ).trim()
+        : "";
+
+
+/*
+    Gemini model.
+*/
+
+const GEMINI_MODEL =
+    "gemini-2.5-flash";
+
+
+/* ============================================================
+   INTERNAL STATE
+============================================================ */
+
+let lastSource =
+    "local";
+
+
+/* ============================================================
+   GET LAST SOURCE
+============================================================ */
+
+export function getLastAnswerSource() {
+
+    return lastSource;
 }
 
 
 /* ============================================================
-   LOCAL MATH ENGINE
+   NORMALIZE
 ============================================================ */
 
-function solveMath(input) {
+function normalize(
+    text
+) {
+
+    return String(
+        text || ""
+    )
+        .toLowerCase()
+        .replace(
+            /\s+/g,
+            " "
+        )
+        .trim();
+}
+
+
+/* ============================================================
+   LOCAL MATH
+============================================================ */
+
+export function solveMath(
+    input
+) {
 
     let expression =
-        String(input || "")
-            .trim();
+        String(
+            input || ""
+        ).trim();
+
 
     /*
-    Remove common natural-language prefixes.
+        Remove natural language.
     */
 
     expression =
@@ -69,54 +159,74 @@ function solveMath(input) {
 
 
     /*
-    Convert common math symbols.
+        Math symbols.
     */
 
     expression =
         expression
-            .replace(/×/g, "*")
-            .replace(/÷/g, "/")
-            .replace(/−/g, "-")
-            .replace(/π/gi, "Math.PI");
+            .replace(
+                /×/g,
+                "*"
+            )
+            .replace(
+                /÷/g,
+                "/"
+            )
+            .replace(
+                /−/g,
+                "-"
+            )
+            .replace(
+                /π/gi,
+                "Math.PI"
+            );
 
 
     /*
-    Allow only a safe mathematical character set.
+        Empty expression.
     */
 
     if (
-        !/^[0-9+\-*/().%\s^MathPI]+$/i.test(
+        !expression
+    ) {
+
+        return null;
+    }
+
+
+    /*
+        Only allow mathematical characters.
+
+        This prevents arbitrary JavaScript from
+        being executed through the calculator.
+    */
+
+    if (
+        !/^[0-9+\-*/().%\s^]+$/.test(
             expression
         )
     ) {
+
         return null;
     }
 
 
     /*
-    Don't evaluate suspicious JavaScript.
+        Exponent.
     */
 
-    if (
-        /(?:constructor|window|document|globalThis|eval|function|=>)/i
-            .test(expression)
-    ) {
-        return null;
-    }
+    expression =
+        expression.replace(
+            /\^/g,
+            "**"
+        );
 
+
+    /*
+        Evaluate mathematical expression.
+    */
 
     try {
-
-        /*
-        Exponent operator.
-        */
-
-        expression =
-            expression.replace(
-                /\^/g,
-                "**"
-            );
-
 
         const result =
             Function(
@@ -125,9 +235,20 @@ function solveMath(input) {
 
 
         if (
-            typeof result !== "number" ||
-            !Number.isFinite(result)
+            typeof result !==
+            "number"
         ) {
+
+            return null;
+        }
+
+
+        if (
+            !Number.isFinite(
+                result
+            )
+        ) {
+
             return null;
         }
 
@@ -142,63 +263,72 @@ function solveMath(input) {
 
 
 /* ============================================================
-   DETECT MATH
+   MATH DETECTION
 ============================================================ */
 
-function isMathQuestion(input) {
+function isMathQuestion(
+    input
+) {
 
     const text =
-        String(input || "")
-            .trim();
+        String(
+            input || ""
+        ).trim();
 
 
     if (
         !text
     ) {
+
         return false;
     }
 
 
-    /*
-    Examples:
-
-    25 + 50
-    293 * 847
-    what is 50 × 20
-    calculate 25^2
-    */
-
     return (
         /^(calculate|solve|what\s+is|what's)?\s*[-+*/().%\d\s×÷−^]+[?]?$/i
-            .test(text)
+            .test(
+                text
+            )
     );
 }
 
 
 /* ============================================================
-   LOCAL CONVERSATION BRAIN
+   LOCAL KNOWLEDGE
 ============================================================ */
 
-function localConversation(
+export function localConversation(
     input
 ) {
 
     const text =
-        clean(input);
+        normalize(
+            input
+        );
 
+
+    /* --------------------------------------------------------
+       Greetings
+       -------------------------------------------------------- */
 
     if (
-        /^(hello|hi|hey|yo|hii|helo)$/.test(
-            text
-        )
+        /^(hello|hi|hey|hii|helo|yo)$/
+            .test(
+                text
+            )
     ) {
 
         return (
-            "Hello! I'm **CrazeMind**, created by **CrazeStudio**. " +
+            "Hello! I'm **CrazeMind**, " +
+            "created by **CrazeStudio**. " +
             "How can I help?"
         );
     }
 
+
+    /* --------------------------------------------------------
+       Creator
+       -------------------------------------------------------- */
 
     if (
         text.includes(
@@ -214,83 +344,132 @@ function localConversation(
 
         return (
             "## CrazeMind\n\n" +
-            "I'm **CrazeMind**, an AI project created by **CrazeStudio**."
+            "I'm **CrazeMind**, an AI project " +
+            "created by **CrazeStudio**."
         );
     }
 
 
+    /* --------------------------------------------------------
+       CrazeMind
+       -------------------------------------------------------- */
+
     if (
-        text === "what is crazemind"
+        text ===
+        "what is crazemind"
     ) {
 
         return (
             "## CrazeMind\n\n" +
-            "CrazeMind is an AI project created by **CrazeStudio**. " +
-            "It uses local memory, local reasoning, training data, " +
-            "and optional AI fallback."
+
+            "CrazeMind is an AI project created " +
+            "by **CrazeStudio**.\n\n" +
+
+            "It has a local memory system, " +
+            "training system, search commands, " +
+            "local reasoning, and an optional " +
+            "Gemini fallback."
         );
     }
 
 
+    /* --------------------------------------------------------
+       AI
+       -------------------------------------------------------- */
+
     if (
-        text === "what is ai" ||
         text ===
-            "what is artificial intelligence"
+        "what is ai" ||
+        text ===
+        "what is artificial intelligence"
     ) {
 
         return (
             "## Artificial Intelligence\n\n" +
-            "Artificial intelligence (AI) is the field of " +
-            "creating computer systems that can perform tasks " +
-            "that normally require human intelligence."
+
+            "Artificial intelligence (AI) is the " +
+            "field of creating computer systems " +
+            "that can perform tasks that normally " +
+            "require human intelligence."
         );
     }
 
 
+    /* --------------------------------------------------------
+       HTML
+       -------------------------------------------------------- */
+
     if (
-        text === "what is html"
+        text ===
+        "what is html"
     ) {
 
         return (
             "## HTML\n\n" +
-            "HTML stands for **HyperText Markup Language**. " +
+
+            "HTML stands for **HyperText Markup " +
+            "Language**.\n\n" +
+
             "It provides the structure of web pages."
         );
     }
 
 
+    /* --------------------------------------------------------
+       CSS
+       -------------------------------------------------------- */
+
     if (
-        text === "what is css"
+        text ===
+        "what is css"
     ) {
 
         return (
             "## CSS\n\n" +
-            "CSS stands for **Cascading Style Sheets**. " +
-            "It controls the appearance and layout of web pages."
+
+            "CSS stands for **Cascading Style " +
+            "Sheets**.\n\n" +
+
+            "It controls the appearance and layout " +
+            "of web pages."
         );
     }
 
 
+    /* --------------------------------------------------------
+       JavaScript
+       -------------------------------------------------------- */
+
     if (
-        text === "what is javascript"
+        text ===
+        "what is javascript"
     ) {
 
         return (
             "## JavaScript\n\n" +
-            "JavaScript is a programming language commonly " +
-            "used to create interactive websites and applications."
+
+            "JavaScript is a programming language " +
+            "commonly used to create interactive " +
+            "websites and web applications."
         );
     }
 
 
+    /* --------------------------------------------------------
+       Python
+       -------------------------------------------------------- */
+
     if (
-        text === "what is python"
+        text ===
+        "what is python"
     ) {
 
         return (
             "## Python\n\n" +
-            "Python is a high-level programming language " +
-            "known for its readable syntax."
+
+            "Python is a high-level programming " +
+            "language known for its readable syntax " +
+            "and large ecosystem."
         );
     }
 
@@ -300,87 +479,198 @@ function localConversation(
 
 
 /* ============================================================
-   GEMINI FALLBACK
+   GEMINI API
 ============================================================ */
 
-async function askGemini(
+export async function askGemini(
     question
 ) {
 
-    const response =
-        await fetch(
-            "/api/gemini",
-            {
-                method: "POST",
+    /*
+        Check API key.
+    */
 
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
+    if (
+        !GEMINI_API_KEY
+    ) {
 
-                body:
-                    JSON.stringify({
-                        prompt:
-                            question
-                    })
-            }
+        throw new Error(
+            "Gemini API key is not configured."
         );
+    }
 
 
-    const text =
+    /*
+        Gemini endpoint.
+    */
+
+    const endpoint =
+        "https://generativelanguage.googleapis.com/" +
+        "v1beta/models/" +
+        GEMINI_MODEL +
+        ":generateContent";
+
+
+    let response;
+
+
+    /*
+        Send request.
+    */
+
+    try {
+
+        response =
+            await fetch(
+                endpoint,
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json",
+
+                        "x-goog-api-key":
+                            GEMINI_API_KEY
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            contents: [
+
+                                {
+
+                                    role:
+                                        "user",
+
+                                    parts: [
+
+                                        {
+
+                                            text:
+                                                question
+
+                                        }
+
+                                    ]
+
+                                }
+
+                            ],
+
+                            generationConfig: {
+
+                                temperature:
+                                    0.7,
+
+                                maxOutputTokens:
+                                    2048
+                            }
+
+                        })
+                }
+            );
+
+    } catch (
+        error
+    ) {
+
+        throw new Error(
+            "Network error while contacting Gemini: " +
+            (
+                error?.message ||
+                String(error)
+            )
+        );
+    }
+
+
+    /*
+        Read response.
+    */
+
+    const raw =
         await response.text();
 
+
+    let data;
+
+
+    try {
+
+        data =
+            JSON.parse(
+                raw
+            );
+
+    } catch {
+
+        throw new Error(
+            "Gemini returned invalid JSON."
+        );
+    }
+
+
+    /*
+        HTTP error.
+    */
 
     if (
         !response.ok
     ) {
 
-        let message =
-            text ||
-            "Gemini request failed.";
-
-
-        try {
-
-            const data =
-                JSON.parse(
-                    text
-                );
-
-
-            message =
-                data.details ||
-                data.error ||
-                message;
-
-        } catch {}
-
-
         throw new Error(
-            message
+            data
+                ?.error
+                ?.message ||
+            `Gemini HTTP ${response.status}`
         );
     }
 
 
-    const data =
-        JSON.parse(
-            text
-        );
+    /*
+        Extract generated text.
+    */
 
+    const answer =
+        data
+            ?.candidates?.[0]
+            ?.content
+            ?.parts
+            ?.map(
+                part =>
+                    part.text || ""
+            )
+            .join("")
+            .trim();
+
+
+    /*
+        No answer.
+    */
 
     if (
-        !data.answer
+        !answer
     ) {
 
+        const reason =
+            data
+                ?.promptFeedback
+                ?.blockReason ||
+            "Gemini returned no text.";
+
+
         throw new Error(
-            "Gemini returned no answer."
+            reason
         );
     }
 
 
-    return String(
-        data.answer
-    ).trim();
+    return answer;
 }
 
 
@@ -394,16 +684,24 @@ async function handleSearch(
 
     const query =
         input
-            .slice(7)
+            .slice(
+                "/search".length
+            )
             .trim();
 
 
-    if (!query) {
+    if (
+        !query
+    ) {
 
         return (
             "Usage: `/search your query`"
         );
     }
+
+
+    lastSource =
+        "search";
 
 
     return await searchText(
@@ -422,7 +720,9 @@ async function handleTrain(
 
     const argument =
         input
-            .slice(6)
+            .slice(
+                "/train".length
+            )
             .trim()
             .toLowerCase();
 
@@ -430,13 +730,18 @@ async function handleTrain(
     let amount;
 
 
+    /*
+        0/full/all = full dataset.
+    */
+
     if (
+        argument === "0" ||
         argument === "full" ||
-        argument === "all" ||
-        argument === "0"
+        argument === "all"
     ) {
 
-        amount = 0;
+        amount =
+            0;
 
     } else {
 
@@ -453,15 +758,21 @@ async function handleTrain(
             amount < 1
         ) {
 
-            amount = 100;
+            amount =
+                100;
         }
     }
+
+
+    lastSource =
+        "training";
 
 
     const result =
         await trainCrazeMind(
             amount,
             {
+
                 onProgress:
                     progress => {
 
@@ -471,12 +782,17 @@ async function handleTrain(
                         );
 
 
+                        /*
+                            Let the frontend
+                            display training progress.
+                        */
+
                         if (
                             typeof window !==
                             "undefined" &&
                             typeof window
                                 .onCrazeMindTrainingProgress ===
-                                "function"
+                            "function"
                         ) {
 
                             window
@@ -484,12 +800,15 @@ async function handleTrain(
                                     progress
                                 );
                         }
+
                     }
+
             }
         );
 
 
     return (
+
         "## Training Complete\n\n" +
 
         `- Dataset: \`${result.dataset}\`\n` +
@@ -509,11 +828,16 @@ async function handleTrain(
 
 async function handleStats() {
 
+    lastSource =
+        "local";
+
+
     const stats =
         await getTrainingStats();
 
 
     return (
+
         "## CrazeMind Brain\n\n" +
 
         `- Stored examples: **${stats.examples}**\n` +
@@ -531,12 +855,28 @@ async function handleStats() {
 
 async function handleClear() {
 
-    await clearTraining();
+    lastSource =
+        "local";
+
+
+    const success =
+        await clearTraining();
+
+
+    if (
+        success
+    ) {
+
+        return (
+            "## Memory Cleared\n\n" +
+            "CrazeMind's local training memory " +
+            "has been cleared."
+        );
+    }
 
 
     return (
-        "## Memory Cleared\n\n" +
-        "CrazeMind's local training memory has been cleared."
+        "Could not clear CrazeMind's memory."
     );
 }
 
@@ -547,11 +887,16 @@ async function handleClear() {
 
 async function handleDownload() {
 
+    lastSource =
+        "local";
+
+
     await downloadWeights();
 
 
     return (
-        "Training data exported as `crazemind-training.json`."
+        "Training data exported as " +
+        "`crazemind-training.json`."
     );
 }
 
@@ -565,12 +910,19 @@ async function handleCommand(
 ) {
 
     const lower =
-        clean(input);
+        normalize(
+            input
+        );
 
+
+    /*
+        /search
+    */
 
     if (
+        lower === "/search" ||
         lower.startsWith(
-            "/search"
+            "/search "
         )
     ) {
 
@@ -580,9 +932,14 @@ async function handleCommand(
     }
 
 
+    /*
+        /train
+    */
+
     if (
+        lower === "/train" ||
         lower.startsWith(
-            "/train"
+            "/train "
         )
     ) {
 
@@ -592,32 +949,45 @@ async function handleCommand(
     }
 
 
+    /*
+        /stats
+    */
+
     if (
-        lower ===
-        "/stats"
+        lower === "/stats"
     ) {
 
         return await handleStats();
     }
 
 
+    /*
+        /clear
+    */
+
     if (
-        lower ===
-        "/clear"
+        lower === "/clear"
     ) {
 
         return await handleClear();
     }
 
 
+    /*
+        /download
+    */
+
     if (
-        lower ===
-        "/download"
+        lower === "/download"
     ) {
 
         return await handleDownload();
     }
 
+
+    /*
+        Unknown command.
+    */
 
     return null;
 }
@@ -638,7 +1008,13 @@ export async function answerQuestion(
         ).trim();
 
 
-    if (!input) {
+    /*
+        Empty question.
+    */
+
+    if (
+        !input
+    ) {
 
         return (
             "Please ask me something."
@@ -653,7 +1029,9 @@ export async function answerQuestion(
     */
 
     if (
-        input.startsWith("/")
+        input.startsWith(
+            "/"
+        )
     ) {
 
         const commandResult =
@@ -692,18 +1070,24 @@ export async function answerQuestion(
             ).trim()
         ) {
 
+            lastSource =
+                "local-memory";
+
+
             console.log(
-                "[CrazeMind] ✓ Local memory"
+                "[CrazeMind] LOCAL MEMORY"
             );
 
 
             return remembered;
         }
 
-    } catch (error) {
+    } catch (
+        error
+    ) {
 
         console.warn(
-            "[CrazeMind] Memory error:",
+            "[CrazeMind] Local memory error:",
             error
         );
     }
@@ -731,13 +1115,19 @@ export async function answerQuestion(
             result !== null
         ) {
 
+            lastSource =
+                "local-math";
+
+
             console.log(
-                "[CrazeMind] ✓ Local math engine"
+                "[CrazeMind] LOCAL MATH"
             );
 
 
             return (
-                `## Answer\n\n` +
+
+                "## Answer\n\n" +
+
                 `**${result}**`
             );
         }
@@ -760,9 +1150,29 @@ export async function answerQuestion(
         localAnswer
     ) {
 
+        lastSource =
+            "local-knowledge";
+
+
         console.log(
-            "[CrazeMind] ✓ Local reasoning"
+            "[CrazeMind] LOCAL KNOWLEDGE"
         );
+
+
+        /*
+            Save built-in knowledge too.
+        */
+
+        try {
+
+            await learn(
+                input,
+                localAnswer
+            );
+
+        } catch {
+            // Don't stop answer if memory save fails.
+        }
 
 
         return localAnswer;
@@ -771,7 +1181,7 @@ export async function answerQuestion(
 
     /*
     ============================================================
-    5. GEMINI FALLBACK
+    5. AI DISABLED
     ============================================================
     */
 
@@ -779,63 +1189,99 @@ export async function answerQuestion(
         options.useAI === false
     ) {
 
+        lastSource =
+            "not-found";
+
+
         return (
-            "I couldn't find that in my local brain."
+
+            "## Not found\n\n" +
+
+            "I don't know that yet."
         );
     }
 
 
+    /*
+    ============================================================
+    6. GEMINI FALLBACK
+    ============================================================
+    */
+
     console.log(
-        "[CrazeMind] → Gemini fallback"
+        "[CrazeMind] LOCAL BRAIN FAILED → GEMINI"
     );
 
 
     try {
 
-        const answer =
+        const aiAnswer =
             await askGemini(
                 input
             );
 
 
+        lastSource =
+            "gemini";
+
+
         /*
-        Save Gemini's answer so that
-        CrazeMind can recall it later.
+        ========================================================
+        SAVE GEMINI ANSWER
+        ========================================================
         */
 
         try {
 
             await learn(
                 input,
-                answer
+                aiAnswer
             );
 
-        } catch (error) {
+
+            console.log(
+                "[CrazeMind] Gemini answer saved."
+            );
+
+        } catch (
+            memoryError
+        ) {
 
             console.warn(
-                "[CrazeMind] Could not save AI answer:",
-                error
+                "[CrazeMind] Could not save Gemini answer:",
+                memoryError
             );
         }
 
 
-        return answer;
+        return aiAnswer;
 
-    } catch (error) {
+    } catch (
+        error
+    ) {
+
+        lastSource =
+            "error";
+
 
         console.error(
-            "[CrazeMind] Gemini error:",
+            "[CrazeMind] Gemini fallback error:",
             error
         );
 
 
         return (
-            "## Not found\n\n" +
 
-            "I couldn't find an answer in my " +
-            "local CrazeMind brain.\n\n" +
+            "## I couldn't answer that\n\n" +
 
-            "Gemini fallback is currently unavailable."
+            "I couldn't find the answer in " +
+            "CrazeMind's local brain.\n\n" +
+
+            `**Gemini error:** ${
+                error?.message ||
+                String(error) ||
+                "Unknown error"
+            }`
         );
     }
 }
@@ -845,16 +1291,15 @@ export async function answerQuestion(
    EXPORTS
 ============================================================ */
 
-export {
-    askGemini,
-    solveMath,
-    localConversation
-};
-
-
 export default {
+
     answerQuestion,
+
     askGemini,
+
     solveMath,
-    localConversation
+
+    localConversation,
+
+    getLastAnswerSource
 };
