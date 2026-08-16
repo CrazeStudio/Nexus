@@ -661,11 +661,11 @@ export async function askGemini(question) {
                 "Netlify Gemini function was not found " +
                 "(HTTP 404).\n\n" +
 
-                "Make sure this file exists:\n" +
+                "Make sure a Gemini function file exists " +
+                "under netlify/functions/ (e.g. gemini.mjs)\n\n" +
 
-                "netlify/functions/gemini.js\n\n" +
-
-                "and that the site is deployed on Netlify."
+                "and that the site has been redeployed on Netlify " +
+                "since that file was added or moved."
 
             );
         }
