@@ -6,240 +6,128 @@ CrazeStudio
 */
 
 export default async function handler(req, res) {
-
-    /* CORS */
-
-    res.setHeader(
-        "Access-Control-Allow-Origin",
-        "*"
-    );
-
-    res.setHeader(
-        "Access-Control-Allow-Methods",
-        "GET, OPTIONS"
-    );
-
-    res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Content-Type"
-    );
-
+    // 1. CORS Headers
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (req.method === "OPTIONS") {
-
         return res.status(200).end();
     }
 
-
     if (req.method !== "GET") {
-
         return res.status(405).json({
-            error: "Method not allowed"
+            error: "Method not allowed",
+            message: `HTTP method ${req.method} is not supported. Use GET.`
         });
     }
 
+    // 2. Query Parameter Extraction (Supports Next.js, Express, and native Node runtimes)
+    let queryParams = req.query;
 
-    /* Parameters */
+    if (!queryParams || Object.keys(queryParams).length === 0) {
+        try {
+            const host = req.headers.host || "localhost";
+            const parsedUrl = new URL(req.url || "", `http://${host}`);
+            queryParams = Object.fromEntries(parsedUrl.searchParams.entries());
+        } catch {
+            queryParams = {};
+        }
+    }
 
-    const dataset =
-        String(
-            req.query.dataset ||
-            "togethercomputer/llama-instruct"
-        );
+    const dataset = String(queryParams.dataset || "togethercomputer/llama-instruct").trim();
+    const config = String(queryParams.config || "default").trim();
+    const split = String(queryParams.split || "train").trim();
+    const offset = Math.max(0, parseInt(queryParams.offset, 10) || 0);
+    const length = Math.min(100, Math.max(1, parseInt(queryParams.length, 10) || 100));
 
-    const config =
-        String(
-            req.query.config ||
-            "default"
-        );
+    // 3. Construct Hugging Face Server URL
+    const targetUrl = new URL("https://datasets-server.huggingface.co/rows");
+    targetUrl.searchParams.set("dataset", dataset);
+    targetUrl.searchParams.set("config", config);
+    targetUrl.searchParams.set("split", split);
+    targetUrl.searchParams.set("offset", String(offset));
+    targetUrl.searchParams.set("length", String(length));
 
-    const split =
-        String(
-            req.query.split ||
-            "train"
-        );
+    console.log(`[CrazeMind] Proxying request to: ${targetUrl.toString()}`);
 
-    const offset =
-        Math.max(
-            0,
-            Number(req.query.offset) || 0
-        );
+    // 4. Request Headers & Authentication
+    const hfToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
+    const headers = {
+        "Accept": "application/json",
+        "User-Agent": "CrazeMind-CrazeStudio/1.0 (Proxy Service)"
+    };
 
-    const length =
-        Math.min(
-            100,
-            Math.max(
-                1,
-                Number(req.query.length) || 100
-            )
-        );
-
-
-    /* Hugging Face API */
-
-    const url =
-        new URL(
-            "https://datasets-server.huggingface.co/rows"
-        );
-
-
-    url.searchParams.set(
-        "dataset",
-        dataset
-    );
-
-    url.searchParams.set(
-        "config",
-        config
-    );
-
-    url.searchParams.set(
-        "split",
-        split
-    );
-
-    url.searchParams.set(
-        "offset",
-        String(offset)
-    );
-
-    url.searchParams.set(
-        "length",
-        String(length)
-    );
-
-
-    console.log(
-        "[CrazeMind] Hugging Face:",
-        url.toString()
-    );
-
+    if (hfToken) {
+        headers["Authorization"] = `Bearer ${hfToken}`;
+    }
 
     try {
+        const response = await fetch(targetUrl.toString(), {
+            method: "GET",
+            headers
+        });
 
-        const response =
-            await fetch(
-                url.toString(),
-                {
-                    method: "GET",
-
-                    headers: {
-                        Accept:
-                            "application/json",
-
-                        "User-Agent":
-                            "CrazeMind-CrazeStudio"
-                    }
-                }
-            );
-
-
-        const text =
-            await response.text();
-
-
-        console.log(
-            "[CrazeMind] HF status:",
-            response.status
-        );
-
-
-        if (!response.ok) {
-
-            return res.status(
-                response.status
-            ).json({
-
-                error:
-                    "Hugging Face request failed",
-
-                status:
-                    response.status,
-
-                details:
-                    text.slice(
-                        0,
-                        2000
-                    )
-            });
-        }
-
-
-        let data;
-
+        const rawText = await response.text();
+        let payload;
 
         try {
-
-            data =
-                JSON.parse(
-                    text
-                );
-
+            payload = JSON.parse(rawText);
         } catch {
-
             return res.status(502).json({
-
-                error:
-                    "Hugging Face returned invalid JSON",
-
-                details:
-                    text.slice(
-                        0,
-                        1000
-                    )
+                error: "Invalid JSON response from upstream server",
+                status: response.status,
+                details: rawText.slice(0, 1000)
             });
         }
 
-
-        if (
-            !data ||
-            !Array.isArray(data.rows)
-        ) {
-
-            return res.status(502).json({
-
-                error:
-                    "Invalid dataset response",
-
-                details:
-                    "Hugging Face did not return a rows array."
+        // 5. Handle Hugging Face 202 (Dataset is being cached/indexed)
+        if (response.status === 202) {
+            return res.status(202).json({
+                error: "Dataset processing in progress",
+                status: 202,
+                message: payload?.message || "The dataset is currently being processed by Hugging Face. Retry in a few moments.",
+                estimated_time: payload?.estimated_time ?? null
             });
         }
 
+        // 6. Handle HTTP Error Responses from Hugging Face
+        if (!response.ok) {
+            return res.status(response.status).json({
+                error: payload?.message || "Hugging Face upstream error",
+                status: response.status,
+                details: payload
+            });
+        }
 
+        // 7. Validate Dataset Rows Structure
+        if (!payload || !Array.isArray(payload.rows)) {
+            return res.status(502).json({
+                error: "Malformed dataset response",
+                details: "Hugging Face returned successful status but did not provide a valid 'rows' array.",
+                raw: payload
+            });
+        }
+
+        // 8. Return Standardized Clean Response
         return res.status(200).json({
-
-            rows:
-                data.rows,
-
-            num_rows_total:
-                data.num_rows_total ?? null,
-
-            num_rows_per_page:
-                data.num_rows_per_page ??
-                data.rows.length,
-
-            partial:
-                data.partial ?? false
-
+            dataset,
+            config,
+            split,
+            offset,
+            length: payload.rows.length,
+            num_rows_total: payload.num_rows_total ?? null,
+            num_rows_per_page: payload.num_rows_per_page ?? payload.rows.length,
+            partial: payload.partial ?? false,
+            rows: payload.rows
         });
 
     } catch (error) {
-
-        console.error(
-            "[CrazeMind] Proxy error:",
-            error
-        );
-
+        console.error("[CrazeMind] Proxy Fetch Exception:", error);
 
         return res.status(502).json({
-
-            error:
-                "Could not contact Hugging Face",
-
-            details:
-                error?.message ||
-                String(error)
+            error: "Gateway Connection Failure",
+            details: error?.message || String(error)
         });
     }
 }
